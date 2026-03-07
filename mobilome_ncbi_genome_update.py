@@ -141,8 +141,10 @@ def parse_and_clean_metadata(tsv_file, clean_tsv_file):
     """Step 1.2: 解析并清洗元数据"""
     Logger.info("解析并格式化元数据...")
     valid_count = 0
+
+    best_genomes = {}
     
-    with tsv_file.open("r") as fin, clean_tsv_file.open("w") as fout:
+    with tsv_file.open("r") as fin:
         # dataformat 输出包含表头，需要跳过
         try:
             line = next(fin)
@@ -171,8 +173,36 @@ def parse_and_clean_metadata(tsv_file, clean_tsv_file):
             except ValueError:
                 continue
 
+            # 版本去重逻辑
+            if "." in gca:
+                base_acc, ver_str = gca.rsplit(".", 1)
+                try:
+                    ver = int(ver_str)
+                except ValueError:
+                    ver = 0
+            else:
+                base_acc = gca
+                ver = 0
+            
+            current_record = {
+                "gca": gca,
+                "organism_name": organism_name,
+                "seq_len": seq_len,
+                "taxid": taxid,
+                "ver": ver
+            }
+
+            if base_acc not in best_genomes:
+                best_genomes[base_acc] = current_record
+            else:
+                if ver > best_genomes[base_acc]["ver"]:
+                     best_genomes[base_acc] = current_record
+
+    with clean_tsv_file.open("w") as fout:
+        for base_acc in sorted(best_genomes.keys()):
+            rec = best_genomes[base_acc]
             # 输出格式: GCA, Name, Length, TaxID
-            fout.write(f"{gca}\t{organism_name}\t{seq_len}\t{taxid}\n")
+            fout.write(f"{rec['gca']}\t{rec['organism_name']}\t{rec['seq_len']}\t{rec['taxid']}\n")
             valid_count += 1
             
     Logger.success(f"清洗完成，共获取有效基因组记录: {valid_count}")
@@ -435,7 +465,6 @@ def update_repository(work_dir, genome_dir, deprecated_file):
     deprecated_dir.mkdir(parents=True, exist_ok=True)
 
     groups = defaultdict(list)
-    done_prefixes = set()
     # 1. 移动新文件
     moved_count = 0
     # 扫描 work_dir
@@ -472,7 +501,7 @@ def update_repository(work_dir, genome_dir, deprecated_file):
     # 3. 重建索引
     rebuild_index(genome_dir)
 
-def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir):
+def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir, genome_type):
 
 
     """Step 6: 合并 Taxonomy 信息生成最终 Metadata"""
@@ -480,6 +509,19 @@ def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir):
     
     target_meta = genome_dir / "genome_metadata.tsv"
     tmp = target_meta.with_suffix(".tmp")
+
+    # 读取旧元数据以保留 Type=ref
+    existing_ref_gcas = set()
+    if target_meta.exists():
+        with target_meta.open("r") as f:
+            header = f.readline().strip().split("\t")
+            if "Type" in header:
+                type_idx = header.index("Type")
+                gca_idx = 0  # Assuming GCA is always first
+                for line in f:
+                    cols = line.strip().split("\t")
+                    if len(cols) > type_idx and cols[type_idx] == "ref":
+                        existing_ref_gcas.add(cols[gca_idx])
 
     # 加载 Taxonomy (TaxID -> Rank Info)
     tax_info = {}
@@ -508,13 +550,18 @@ def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir):
     records.sort(key=lambda x: int(x[2]), reverse=True)
     
     with tmp.open("w") as f:
-        f.write("GCA\tOrganism\tLength\tTaxID\tLineage\n")
+        f.write("GCA\tOrganism\tLength\tTaxID\tLineage\tType\n")
         for rec in records:
-            f.write("\t".join(rec) + "\n")
+            # rec: [GCA, Organism, Length, TaxID, Lineage]
+            gca = rec[0]
+            curr_type = genome_type
+            if genome_type == "all" and gca in existing_ref_gcas:
+                curr_type = "ref"
+            
+            f.write("\t".join(rec) + f"\t{curr_type}\n")
     tmp.replace(target_meta)
     Logger.success(f"元数据更新完成: {target_meta}")
 
-    
 def check_gz_integrity(gz_path, chunk_size=1024 * 1024):
     #Logger.info("检查压缩文件是否完整中...", end="")
     try:
@@ -570,7 +617,7 @@ def main():
 
     # 2. 检查更新
     list_file, taxid_file, deprecated_file = check_updates_and_plan(meta_clean, genome_root)
-    
+    print(list_file,)
     if list_file:
         # 3. 下载
         Logger.step("Downloading Data")
@@ -586,8 +633,14 @@ def main():
         update_repository(processed_dir, genome_root, deprecated_file)
         
         # 6. 更新元数据表
-        update_metadata_table(meta_clean, tax_report_dir, genome_root)
+        update_metadata_table(meta_clean, tax_report_dir, genome_root, args.genome_type)
         
+        Logger.step("ALL DONE!", level="SUCCESS")
+    elif deprecated_file:
+        # 更新仓库
+        Logger.step("Updating Repository")
+        update_repository(work_tmp_dir, genome_root, deprecated_file)
+
         Logger.step("ALL DONE!", level="SUCCESS")
     else:
         Logger.success("No updates required.")
