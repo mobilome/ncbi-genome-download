@@ -17,8 +17,10 @@ import datetime
 import argparse
 import subprocess
 import json
+import time
 from pathlib import Path
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 全局正则，用于匹配 GCA 编号
 GCA_PATTERN = re.compile(r"(GCA_\d+\.\d+)")
@@ -111,7 +113,7 @@ def run_shell(cmd):
     )
     process.wait()
 
-def fetch_genome_summary(taxon, genome_type, output_file, overwrite=False):
+def fetch_genome_summary(taxon, genome_type, output_file, overwrite=False, api_key=None):
 
     """Step 1: 获取基因组元数据 (datasets summary)"""
     tmp = output_file.with_suffix(".jsonl.tmp")
@@ -120,10 +122,11 @@ def fetch_genome_summary(taxon, genome_type, output_file, overwrite=False):
         return
 
     Logger.info(f"开始获取 {taxon} 基因组元数据 ({genome_type})...")
+    api_key_opt = f" --api-key {api_key}" if api_key else ""
     # 使用 --as-json-lines 格式
     cmd = (
         f"datasets summary genome taxon {taxon} --as-json-lines "
-        f"{'--reference' if genome_type == 'ref' else ''} > {tmp}"
+        f"{'--reference' if genome_type == 'ref' else ''}{api_key_opt} > {tmp}"
     )
     Logger.shell(cmd)
     run_cmd(cmd)
@@ -278,36 +281,176 @@ def check_updates_and_plan(clean_tsv_file, genome_dir):
     
     return list_file, taxid_list_file, deprecated_file
 
-def download_taxonomy_info(taxid_list_file, overwrite=False):
-    """Step 2.1: 下载 Taxonomy 数据"""
-    if not taxid_list_file or not taxid_list_file.exists():
-        return None
-    output_zip = taxid_list_file.parent / (taxid_list_file.name + ".zip")
-    if output_zip.exists() and not overwrite:
-        Logger.info("Taxonomy 数据包已存在，跳过下载。")
+def _download_one_taxonomy_batch(idx, total_batches, batch, parent_dir, overwrite, api_key, max_retries=3):
+    """下载单个 Taxonomy 批次（供线程池调用）
+
+    失败时自动重试，最多 max_retries 次。
+
+    Returns:
+        (idx, batch_summary_path or None)
+    """
+    batch_file = parent_dir / f"taxid_batch_{idx}.txt"
+    batch_zip  = parent_dir / f"taxid_batch_{idx}.zip"
+    batch_dir  = parent_dir / f"taxid_batch_{idx}_report"
+
+    # 写入批次文件
+    with batch_file.open("w") as f:
+        for tid in batch:
+            f.write(f"{tid}\n")
+
+    Logger.info(f"[批次 {idx}/{total_batches}] 包含 {len(batch)} 个 TaxID")
+
+    # 下载（含重试）
+    if batch_zip.exists() and not overwrite:
+        Logger.info(f"  批次 {idx} 数据包已存在，跳过下载。")
     else:
-        Logger.info("正在下载 Taxonomy 数据...")
-        cmd = f"datasets download taxonomy taxon --inputfile {taxid_list_file} --filename {output_zip}"
-        run_shell(cmd)
+        api_key_opt = f" --api-key {api_key}" if api_key else ""
+        cmd = f"datasets download taxonomy taxon --inputfile {batch_file} --filename {batch_zip}{api_key_opt}"
+
+        for attempt in range(1, max_retries + 1):
+            Logger.shell(f"[尝试 {attempt}/{max_retries}] {cmd}")
+            # 删除可能残留的不完整 zip
+            if batch_zip.exists():
+                batch_zip.unlink()
+            proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if proc.returncode == 0 and batch_zip.exists():
+                break
+            Logger.warning(f"  批次 {idx} 第 {attempt} 次尝试失败 (returncode={proc.returncode})")
+            if attempt < max_retries:
+                wait = 10 * attempt  # 递增等待: 10s, 20s, 30s
+                Logger.info(f"  等待 {wait}s 后重试...")
+                time.sleep(wait)
+
+    if not batch_zip.exists():
+        Logger.error(f"  批次 {idx} 经过 {max_retries} 次重试后仍然失败！")
+        return (idx, None)
 
     # 解压
-    report_dir = output_zip.parent / "taxonomy_report"
+    batch_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        f"unzip -o {batch_zip} -d {batch_dir}",
+        shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+
+    batch_summary = batch_dir / "ncbi_dataset" / "data" / "taxonomy_summary.tsv"
+    if batch_summary.exists():
+        Logger.success(f"  批次 {idx} 完成。")
+        return (idx, batch_summary)
+    else:
+        Logger.error(f"  批次 {idx} 解压后未找到 taxonomy_summary.tsv！")
+        return (idx, None)
+
+
+def download_taxonomy_info(taxid_list_file, overwrite=False, batch_size=500, api_key=None, parallel_downloads=4):
+    """Step 2.1: 下载 Taxonomy 数据（自动分批并行下载后合并）
+
+    当 taxid 数量超过 batch_size 时，会拆分为多个子文件，
+    最多 parallel_downloads 个批次同时下载，
+    最后将各批次的 taxonomy_summary.tsv 合并到统一目录。
+    """
+    if not taxid_list_file or not taxid_list_file.exists():
+        return None
+
+    # 读取所有 TaxID
+    with taxid_list_file.open("r") as f:
+        all_taxids = [line.strip() for line in f if line.strip()]
+
+    if not all_taxids:
+        Logger.warning("TaxID 列表为空，跳过 Taxonomy 下载。")
+        return None
+
+    total = len(all_taxids)
+    Logger.info(f"共有 {total} 个 TaxID 需要下载 Taxonomy 信息 (batch_size={batch_size})")
+
+    # 最终合并目录
+    report_dir = taxid_list_file.parent / "taxonomy_report"
     report_dir.mkdir(parents=True, exist_ok=True)
-    cmd = f"unzip -o {output_zip} -d {report_dir}"
-    run_cmd(cmd, verbose=False)
-    
+    merged_data_dir = report_dir / "ncbi_dataset" / "data"
+    merged_data_dir.mkdir(parents=True, exist_ok=True)
+    merged_summary = merged_data_dir / "taxonomy_summary.tsv"
+
+    # 如果已合并且不强制覆盖，直接返回
+    if merged_summary.exists() and not overwrite:
+        Logger.info("Taxonomy 合并文件已存在，跳过下载。")
+        return report_dir
+
+    # 分批
+    batches = [all_taxids[i:i + batch_size] for i in range(0, total, batch_size)]
+    num_batches = len(batches)
+    workers = min(parallel_downloads, num_batches)
+    Logger.info(f"将分 {num_batches} 批次下载 Taxonomy 数据 (并行数: {workers})...")
+
+    parent_dir = taxid_list_file.parent
+
+    # 并行下载
+    batch_results = {}  # idx -> summary_path or None
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(
+                _download_one_taxonomy_batch,
+                idx, num_batches, batch, parent_dir, overwrite, api_key
+            ): idx
+            for idx, batch in enumerate(batches, start=1)
+        }
+        for future in as_completed(futures):
+            idx, summary_path = future.result()
+            batch_results[idx] = summary_path
+
+    # 检查是否有批次失败
+    failed_batches = [idx for idx, path in batch_results.items() if path is None]
+    if failed_batches:
+        failed_batches.sort()
+        Logger.error(f"以下批次下载失败: {failed_batches}")
+        Logger.error("Taxonomy 数据不完整，无法继续，程序终止。")
+        sys.exit(1)
+
+    # 按批次序号顺序合并，保证结果一致性
+    header_line = None
+    all_data_lines = []
+    for idx in sorted(batch_results.keys()):
+        summary_path = batch_results[idx]
+        if summary_path and summary_path.exists():
+            with summary_path.open("r") as f:
+                first_line = f.readline()
+                if header_line is None:
+                    header_line = first_line
+                for line in f:
+                    if line.strip():
+                        all_data_lines.append(line)
+
+    # 合并写入
+    if header_line:
+        with merged_summary.open("w") as f:
+            f.write(header_line)
+            for line in all_data_lines:
+                f.write(line)
+        Logger.success(f"Taxonomy 合并完成: {merged_summary} ({len(all_data_lines)} 条记录)")
+    else:
+        Logger.warning("所有批次均未产生有效的 taxonomy_summary.tsv")
+
+    # 清理批次临时文件
+    for idx in range(1, num_batches + 1):
+        for suffix in [f"taxid_batch_{idx}.txt", f"taxid_batch_{idx}.zip"]:
+            tmp = parent_dir / suffix
+            if tmp.exists():
+                tmp.unlink()
+        tmp_dir = parent_dir / f"taxid_batch_{idx}_report"
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
+
     return report_dir
 
-def download_genomes(list_file, overwrite=False):
+def download_genomes(list_file, overwrite=False, api_key=None):
     """Step 2.2: 下载基因组数据 (Dehydrated + Rehydrate)"""
     output_zip = list_file.parent / (list_file.name + ".zip")
+    api_key_opt = f" --api-key {api_key}" if api_key else ""
 
     if output_zip.exists() and not overwrite:
          Logger.info("基因组数据包已存在，跳过下载。")
     else:
         Logger.info("正在下载基因组数据 (dehydrated)...")
         # 直接使用 inputfile 批量下载
-        cmd = f"datasets download genome accession --inputfile {list_file} --dehydrated --filename {output_zip}"
+        cmd = f"datasets download genome accession --inputfile {list_file} --dehydrated --filename {output_zip}{api_key_opt}"
         run_shell(cmd)
 
     # 解压
@@ -348,7 +491,7 @@ def download_genomes(list_file, overwrite=False):
     tmp_file.replace(fetch_txt)
     
     Logger.info("正在 Rehydrate (下载实际序列)...")
-    run_shell(f"datasets rehydrate --gzip --directory {unzip_dir}")
+    run_shell(f"datasets rehydrate --gzip --directory {unzip_dir}{api_key_opt}")
 
     # 返回包含实际 .fna.gz 的目录
     return unzip_dir / "ncbi_dataset" / "data"
@@ -581,6 +724,9 @@ def parse_args():
     parser.add_argument("--overwrite", action="store_true", help="Force overwrite existing downloads")
     parser.add_argument('--threads', type=int, default=4, help="Parallel threads (default: 4)")
     parser.add_argument('--tmp_dir', type=str, help='Temporary directory')
+    parser.add_argument('--batch_size', type=int, default=500, help="Max TaxIDs per batch for taxonomy download (default: 500)")
+    parser.add_argument('--parallel_downloads', type=int, default=4, help="Max parallel taxonomy batch downloads (default: 4)")
+    parser.add_argument('--api_key', type=str, default=None, help="NCBI API key for datasets commands")
     return parser.parse_args()
 
 def main():
@@ -608,7 +754,7 @@ def main():
     meta_tsv = work_tmp_dir / f"{taxon}.tsv"
     meta_clean = work_tmp_dir / f"{taxon}.clean.tsv"
     
-    fetch_genome_summary(taxon, args.genome_type, meta_json, args.overwrite)
+    fetch_genome_summary(taxon, args.genome_type, meta_json, args.overwrite, args.api_key)
     convert_jsonl_to_tsv(meta_json, meta_tsv)
     count = parse_and_clean_metadata(meta_tsv, meta_clean)
     if count == 0:
@@ -621,8 +767,8 @@ def main():
     if list_file:
         # 3. 下载
         Logger.step("Downloading Data")
-        tax_report_dir = download_taxonomy_info(taxid_file, args.overwrite)
-        raw_data_dir = download_genomes(list_file, args.overwrite)
+        tax_report_dir = download_taxonomy_info(taxid_file, args.overwrite, args.batch_size, args.api_key, args.parallel_downloads)
+        raw_data_dir = download_genomes(list_file, args.overwrite, args.api_key)
         
         # 4. 处理
         Logger.step("Processing Genomes")
