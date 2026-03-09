@@ -24,10 +24,10 @@ sudo apt install ncbi-datasets-cli parallel unzip pigz seqkit samtools ncbi-blas
 2) 或直接从 NCBI 官方下载 `dataset` 与 `dataformat` 二进制（Linux x86_64 示例）：
 
 ```bash
-curl -LO https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/LATEST/linux-amd64/dataset
+curl -LO https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/LATEST/linux-amd64/datasets
 curl -LO https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/LATEST/linux-amd64/dataformat
-chmod +x dataset dataformat
-sudo mv dataset dataformat /usr/local/bin/
+chmod +x datasets dataformat
+sudo mv datasets dataformat /usr/local/bin/
 ```
 
 快速开始

@@ -517,7 +517,7 @@ def validate_and_process_genomes(src_dir, gca_list_file, threads=1):
             try:
                 os.link(src, dst)
                 count += 1
-            except FileExistsError:
+            except (FileExistsError, FileNotFoundError):
                 pass
     
     Logger.info(f"链接了 {count} 个文件到工作目录。")
