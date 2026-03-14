@@ -134,8 +134,8 @@ def fetch_genome_summary(taxon, genome_type, output_file, overwrite=False, api_k
 
 def convert_jsonl_to_tsv(jsonl_file, tsv_file):
     """Step 1.1: 将 JSONL 转换为 TSV (dataformat)"""
-    # 字段: Accession, Current Accession, Paired Accession, Organism Name, Seq Length, TaxID
-    fields = "accession,current-accession,assminfo-paired-assm-accession,organism-name,assmstats-total-sequence-len,organism-tax-id"
+    # 字段: Accession, Current Accession, Paired Accession, Organism Name, Seq Length, TaxID, RefSeq Category
+    fields = "accession,current-accession,assminfo-paired-assm-accession,organism-name,assmstats-total-sequence-len,organism-tax-id,assminfo-refseq-category"
     cmd = f"cat {jsonl_file} | dataformat tsv genome --fields {fields} > {tsv_file}"
     Logger.shell(cmd)
     run_cmd(cmd)
@@ -176,6 +176,9 @@ def parse_and_clean_metadata(tsv_file, clean_tsv_file):
             except ValueError:
                 continue
 
+            # 提取 RefSeq Category（第7列，可能为空）
+            refseq_category = parts[6].strip() if len(parts) > 6 else ""
+
             # 版本去重逻辑
             if "." in gca:
                 base_acc, ver_str = gca.rsplit(".", 1)
@@ -192,6 +195,7 @@ def parse_and_clean_metadata(tsv_file, clean_tsv_file):
                 "organism_name": organism_name,
                 "seq_len": seq_len,
                 "taxid": taxid,
+                "refseq_category": refseq_category,
                 "ver": ver
             }
 
@@ -204,8 +208,8 @@ def parse_and_clean_metadata(tsv_file, clean_tsv_file):
     with clean_tsv_file.open("w") as fout:
         for base_acc in sorted(best_genomes.keys()):
             rec = best_genomes[base_acc]
-            # 输出格式: GCA, Name, Length, TaxID
-            fout.write(f"{rec['gca']}\t{rec['organism_name']}\t{rec['seq_len']}\t{rec['taxid']}\n")
+            # 输出格式: GCA, Name, Length, TaxID, RefseqCategory
+            fout.write(f"{rec['gca']}\t{rec['organism_name']}\t{rec['seq_len']}\t{rec['taxid']}\t{rec['refseq_category']}\n")
             valid_count += 1
             
     Logger.success(f"清洗完成，共获取有效基因组记录: {valid_count}")
@@ -264,10 +268,20 @@ def check_updates_and_plan(clean_tsv_file, genome_dir):
         for gca in sorted(to_download):
             f.write(f"{gca}\n")
     
-    # 2. TaxID 列表 (唯一)
-    unique_taxids = sorted({taxid for taxid in remote_genomes.values() if taxid})
+    # 2. TaxID 列表 (仅下载本地元数据中尚未存在的 TaxID)
+    all_taxids = {taxid for taxid in remote_genomes.values() if taxid}
+    existing_taxids = set()
+    meta_file = genome_dir / "genome_metadata.tsv"
+    if meta_file.exists():
+        with meta_file.open("r") as f:
+            header = f.readline()
+            for line in f:
+                cols = line.strip().split("\t")
+                if len(cols) >= 4:
+                    existing_taxids.add(cols[3])
+    new_taxids = sorted(all_taxids - existing_taxids)
     with taxid_list_file.open("w") as f:
-        for tid in unique_taxids:
+        for tid in new_taxids:
             f.write(f"{tid}\n")
 
     # 3. 废弃列表
@@ -276,7 +290,7 @@ def check_updates_and_plan(clean_tsv_file, genome_dir):
             f.write(f"{gca}\n")
 
     Logger.info(f"计划下载基因组数: {len(to_download)}")
-    Logger.info(f"涉及 TaxID 数: {len(unique_taxids)}")
+    Logger.info(f"需新增下载 TaxID 数: {len(new_taxids)} (本地已有: {len(existing_taxids)}, 远程总计: {len(all_taxids)})")
     Logger.info(f"已废弃基因组数: {len(deprecated)}")
     
     return list_file, taxid_list_file, deprecated_file
@@ -597,7 +611,8 @@ def rebuild_index(genome_dir):
         f.writelines(sorted(records))
     tmp.replace(index_file)
     
-    Logger.success(f"索引已更新: {index_file} ({len(records)} 条记录)")
+    genome_count = len({line.split("\t")[0] for line in records})
+    Logger.success(f"索引已更新: {index_file} ({genome_count} 个基因组, {len(records)} 个文件)")
 
 def update_repository(work_dir, genome_dir, deprecated_file):
     """Step 5: 将处理好的文件归档到最终目录"""
@@ -653,21 +668,20 @@ def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir, genome_type)
     target_meta = genome_dir / "genome_metadata.tsv"
     tmp = target_meta.with_suffix(".tmp")
 
-    # 读取旧元数据以保留 Type=ref
-    existing_ref_gcas = set()
+    # 加载已有 Taxonomy (从旧 genome_metadata.tsv 中提取 TaxID -> Lineage)
+    tax_info = {}
     if target_meta.exists():
         with target_meta.open("r") as f:
             header = f.readline().strip().split("\t")
-            if "Type" in header:
-                type_idx = header.index("Type")
-                gca_idx = 0  # Assuming GCA is always first
+            if "Lineage" in header and "TaxID" in header:
+                lineage_idx = header.index("Lineage")
+                taxid_idx = header.index("TaxID")
                 for line in f:
                     cols = line.strip().split("\t")
-                    if len(cols) > type_idx and cols[type_idx] == "ref":
-                        existing_ref_gcas.add(cols[gca_idx])
+                    if len(cols) > lineage_idx and cols[lineage_idx] != "NA":
+                        tax_info[cols[taxid_idx]] = cols[lineage_idx]
 
-    # 加载 Taxonomy (TaxID -> Rank Info)
-    tax_info = {}
+    # 加载新下载的 Taxonomy (覆盖旧数据)
     if taxonomy_dir:
         tax_summary = taxonomy_dir / "ncbi_dataset/data/taxonomy_summary.tsv"
         if tax_summary.exists():
@@ -680,28 +694,27 @@ def update_metadata_table(clean_tsv_file, taxonomy_dir, genome_dir, genome_type)
                     tax_info[tid] = ranks
 
     # 合并
-    # 读取 clean_tsv (GCA, Name, Len, TaxID)
+    # 读取 clean_tsv (GCA, Name, Len, TaxID, RefseqCategory)
     records = []
     with clean_tsv_file.open("r") as f:
         for line in f:
             cols = line.strip().split("\t")
             taxid = cols[3]
+            refseq_category = cols[4] if len(cols) > 4 else ""
             extra = tax_info.get(taxid, "NA")
-            records.append(cols + [extra])
+            records.append((cols[:4], extra, refseq_category))
             
     # 排序并写入 (按长度降序)
-    records.sort(key=lambda x: int(x[2]), reverse=True)
+    records.sort(key=lambda x: int(x[0][2]), reverse=True)
     
     with tmp.open("w") as f:
         f.write("GCA\tOrganism\tLength\tTaxID\tLineage\tType\n")
-        for rec in records:
-            # rec: [GCA, Organism, Length, TaxID, Lineage]
-            gca = rec[0]
+        for base_cols, lineage, refseq_cat in records:
             curr_type = genome_type
-            if genome_type == "all" and gca in existing_ref_gcas:
+            if genome_type == "all" and refseq_cat == "reference genome":
                 curr_type = "ref"
             
-            f.write("\t".join(rec) + f"\t{curr_type}\n")
+            f.write("\t".join(base_cols) + f"\t{lineage}\t{curr_type}\n")
     tmp.replace(target_meta)
     Logger.success(f"元数据更新完成: {target_meta}")
 
