@@ -4,7 +4,17 @@
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-✓-2496ED.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+## 快速导航
+
+- [功能概览](#功能概览)
+- [快速开始](#快速开始)
+- [命令行使用](#方式三命令行独立使用)
+- [API 文档](#api-文档)
+- [基因组校验](#基因组完整性校验)
+- [工作流程](#工作流程)
 
 ---
 
