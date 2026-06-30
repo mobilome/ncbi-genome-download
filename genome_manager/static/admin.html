@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理后台 — NCBI Genome Manager</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999"></div>
+
+<!-- ════════════════════ 外层：仅控制 tab 切换 ════════════════════ -->
+<div x-data="adminShell()">
+
+  <!-- 导航栏 -->
+  <nav class="navbar navbar-dark navbar-ngm px-4 py-2 mb-0">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/admin">
+      <i class="bi bi-diagram-3-fill fs-5"></i>
+      <span>NCBI Genome Manager</span>
+    </a>
+    <div class="d-flex gap-3 align-items-center">
+      <a href="/stats" class="text-white-50 text-decoration-none">
+        <i class="bi bi-bar-chart-fill me-1"></i>数据统计
+      </a>
+      <span class="text-white-50">|</span>
+      <span class="text-white-50 small">
+        <i class="bi bi-person-circle me-1"></i><span x-text="adminUser"></span>
+      </span>
+      <a href="/logout" class="btn btn-sm btn-outline-light" title="退出登录">
+        <i class="bi bi-box-arrow-right me-1"></i>退出
+      </a>
+    </div>
+  </nav>
+
+  <!-- Tab 导航 -->
+  <div class="bg-white border-bottom px-4">
+    <ul class="nav nav-tabs border-0">
+      <li class="nav-item">
+        <button class="nav-link py-3"
+                :class="{ active: activeTab === 'tasks' }"
+                @click="switchTab('tasks')">
+          <i class="bi bi-list-task me-2"></i>任务管理
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link py-3"
+                :class="{ active: activeTab === 'configs' }"
+                @click="switchTab('configs')">
+          <i class="bi bi-gear-fill me-2"></i>配置管理
+        </button>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ════════ 任务管理面板 ════════ -->
+  <div x-show="activeTab === 'tasks'" x-data="dashboard()">
+    <div class="container-fluid px-4 pt-4">
+
+      <!-- 统计卡片 -->
+      <div class="row g-3 mb-4">
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#1a5276">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-list-check stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.tasks?.total ?? 0"></div>
+                <div class="stat-label">全部任务</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#1565c0">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-arrow-repeat stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.tasks?.running ?? 0"></div>
+                <div class="stat-label">运行中</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#6c757d">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-clock stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.tasks?.pending ?? 0"></div>
+                <div class="stat-label">等待中</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#198754">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-check-circle-fill stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.tasks?.done ?? 0"></div>
+                <div class="stat-label">已完成</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#dc3545">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-x-circle-fill stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.tasks?.failed ?? 0"></div>
+                <div class="stat-label">失败</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-6 col-sm-4 col-lg-2">
+          <div class="card stat-card text-white" style="background:#6f42c1">
+            <div class="card-body d-flex align-items-center gap-3">
+              <i class="bi bi-collection-fill stat-icon"></i>
+              <div>
+                <div class="stat-value" x-text="stats.genomes?.total ?? 0"></div>
+                <div class="stat-label">本地基因组</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 磁盘用量 -->
+      <div class="row g-2 mb-3" x-show="stats.disk && stats.disk.length > 0">
+        <template x-for="d in (stats.disk || [])" :key="d.mount">
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="card shadow-sm">
+              <div class="card-body py-2 px-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small fw-semibold font-monospace text-truncate" :title="d.mount" x-text="d.mount"></span>
+                  <span class="small text-muted ms-2 text-nowrap">
+                    <span x-text="fmtSize(d.used)"></span> / <span x-text="fmtSize(d.total)"></span>
+                  </span>
+                </div>
+                <div class="progress" style="height:6px">
+                  <div class="progress-bar"
+                       :class="d.percent > 90 ? 'bg-danger' : d.percent > 70 ? 'bg-warning' : 'bg-success'"
+                       :style="'width:' + d.percent + '%'"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                  <span class="small text-muted">可用 <strong x-text="fmtSize(d.free)"></strong></span>
+                  <span class="small" :class="d.percent > 90 ? 'text-danger fw-bold' : 'text-muted'">
+                    <span x-text="d.percent"></span>%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 任务列表 -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between py-2">
+          <span class="fw-semibold"><i class="bi bi-list-task me-2"></i>任务队列</span>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-sm btn-danger" x-show="selectedIds.size > 0"
+                    @click="deleteSelected()">
+              <i class="bi bi-trash me-1"></i>删除选中
+              (<span x-text="selectedIds.size"></span>)
+            </button>
+            <select class="form-select form-select-sm" style="width:auto"
+                    x-model="filterStatus" @change="fetchTasks()">
+              <option value="">全部状态</option>
+              <option value="pending">等待中</option>
+              <option value="running">运行中</option>
+              <option value="done">已完成</option>
+              <option value="failed">失败</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-ngm mb-0">
+              <thead>
+                <tr>
+                  <th style="width:36px">
+                    <input type="checkbox" class="form-check-input"
+                           :checked="allSelected"
+                           :indeterminate.prop="someSelected"
+                           @change="toggleSelectAll($event.target.checked)" />
+                  </th>
+                  <th style="width:60px">ID</th>
+                  <th>分类单元</th>
+                  <th>类型</th>
+                  <th>基因组目录</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
+                  <th>完成时间</th>
+                  <th style="width:100px">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-if="tasks.length === 0 && !loading">
+                  <tr>
+                    <td colspan="9">
+                      <div class="empty-state text-center">
+                        <i class="bi bi-inbox d-block mb-2"></i>
+                        <span>暂无任务，请前往「配置管理」提交任务</span>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <template x-for="task in tasks" :key="task.id">
+                  <tr @click="viewTask(task)">
+                    <td @click.stop>
+                      <input type="checkbox" class="form-check-input"
+                             :checked="selectedIds.has(task.id)"
+                             @change="toggleSelect(task.id)" />
+                    </td>
+                    <td class="text-muted" x-text="task.id"></td>
+                    <td class="fw-semibold" x-text="task.taxon"></td>
+                    <td>
+                      <span class="badge" :class="task.genome_type === 'ref' ? 'bg-info text-dark' : 'bg-warning text-dark'"
+                            x-text="task.genome_type === 'ref' ? '参考' : '全部'"></span>
+                    </td>
+                    <td class="text-truncate" style="max-width:200px" :title="task.genome_dir"
+                        x-text="task.genome_dir"></td>
+                    <td>
+                      <span class="badge" :class="statusBadge(task.status)">
+                        <i class="bi me-1" :class="statusIcon(task.status)"></i>
+                        <span x-text="statusLabel(task.status)"></span>
+                      </span>
+                    </td>
+                    <td class="text-muted small" x-text="fmtDate(task.created_at)"></td>
+                    <td class="text-muted small" x-text="fmtDate(task.finished_at)"></td>
+                    <td @click.stop>
+                      <button class="btn btn-sm btn-outline-secondary me-1"
+                              @click="viewTask(task)" title="查看日志">
+                        <i class="bi bi-terminal"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger"
+                              x-show="task.status === 'pending' || task.status === 'running'"
+                              @click="cancelTask(task)" title="取消">
+                        <i class="bi bi-stop-circle"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center py-2"
+             x-show="totalTasks > pageSize">
+          <span class="text-muted small">
+            共 <strong x-text="totalTasks"></strong> 条，
+            第 <strong x-text="Math.floor(taskOffset/pageSize)+1"></strong> /
+            <strong x-text="Math.ceil(totalTasks/pageSize)"></strong> 页
+          </span>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" :disabled="taskOffset === 0"
+                    @click="taskOffset = Math.max(0, taskOffset-pageSize); fetchTasks()">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <button class="btn btn-outline-secondary"
+                    :disabled="taskOffset + pageSize >= totalTasks"
+                    @click="taskOffset += pageSize; fetchTasks()">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /container tasks -->
+
+    <!-- 任务日志 Modal（teleport 到 body，避免被父级 x-show 遮蔽） -->
+    <template x-teleport="body">
+      <div class="modal fade" id="logModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">
+                <i class="bi bi-terminal me-2"></i>
+                任务日志 — #<span x-text="selectedTask?.id"></span>
+                <span x-show="selectedTask" class="ms-2 badge"
+                      :class="statusBadge(selectedTask?.status)"
+                      x-text="statusLabel(selectedTask?.status)"></span>
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"
+                      @click="stopLogStream()"></button>
+            </div>
+            <div class="modal-body p-2">
+              <div class="row g-2 px-2 mb-2 small text-muted" x-show="selectedTask">
+                <div class="col-auto"><i class="bi bi-tag me-1"></i><strong x-text="selectedTask?.taxon"></strong></div>
+                <div class="col-auto"><i class="bi bi-folder me-1"></i><span x-text="selectedTask?.genome_dir"></span></div>
+                <div class="col-auto" x-show="selectedTask?.started_at">
+                  <i class="bi bi-play me-1"></i><span x-text="fmtDate(selectedTask?.started_at)"></span>
+                </div>
+                <div class="col-auto" x-show="selectedTask?.error_msg">
+                  <i class="bi bi-exclamation-triangle text-danger me-1"></i>
+                  <span class="text-danger" x-text="selectedTask?.error_msg"></span>
+                </div>
+              </div>
+              <div class="log-viewer" id="logViewer">
+                <template x-if="logLines.length === 0">
+                  <span class="text-muted">暂无日志…</span>
+                </template>
+                <template x-for="(line, i) in logLines" :key="i">
+                  <div :class="logLineClass(line)" x-text="line"></div>
+                </template>
+              </div>
+            </div>
+            <div class="modal-footer py-2">
+              <span class="text-muted small me-auto" x-text="logLines.length + ' 行日志'"></span>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      @click="scrollLogBottom()">
+                <i class="bi bi-arrow-down-circle me-1"></i>滚到底部
+              </button>
+              <button type="button" class="btn btn-sm btn-secondary"
+                      data-bs-dismiss="modal" @click="stopLogStream()">关闭</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /logModal teleport -->
+
+  </div><!-- /tasks panel -->
+
+
+  <!-- ════════ 配置管理面板 ════════ -->
+  <div x-show="activeTab === 'configs'" x-data="configManager()">
+    <div class="container-fluid px-4 pt-4">
+
+      <!-- 页面标题 + 新建按钮 -->
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="mb-0 fw-semibold">
+          <i class="bi bi-gear-fill me-2 text-secondary"></i>Taxon 下载配置
+        </h5>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm" @click="exportConfigs()" title="导出所有配置">
+            <i class="bi bi-download me-1"></i>导出
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" @click="triggerImport()" title="从 JSON 导入配置">
+            <i class="bi bi-upload me-1"></i>导入
+          </button>
+          <button class="btn btn-primary btn-sm" @click="openForm()">
+            <i class="bi bi-plus-lg me-1"></i>新建配置
+          </button>
+        </div>
+      </div>
+
+      <!-- 隐藏的导入文件输入 -->
+      <input type="file" id="importConfigsFile" accept="application/json" style="display:none" @change="handleImportFile($event)" />
+
+      <!-- 配置卡片列表 -->
+      <div class="row g-3" x-show="configs.length > 0">
+        <template x-for="cfg in configs" :key="cfg.id">
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="card shadow-sm h-100">
+              <div class="card-header d-flex align-items-center justify-content-between py-2">
+                <div class="d-flex align-items-center gap-2 text-truncate">
+                  <span class="fw-semibold text-truncate" x-text="cfg.name" :title="cfg.name"></span>
+                  <template x-if="(cfg.predownload_interval_days||0) > 0 || cfg.download_interval_days > 0 || cfg.process_interval_days > 0">
+                    <span class="badge bg-success flex-shrink-0">
+                      <i class="bi bi-arrow-repeat me-1"></i>已调度
+                    </span>
+                  </template>
+                </div>
+                <div class="d-flex gap-1 flex-shrink-0">
+                  <button class="btn btn-sm btn-outline-success" @click="triggerConfig(cfg)" title="立即触发更新">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" @click="useConfig(cfg)" title="使用此配置创建任务">
+                    <i class="bi bi-play-fill"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-info" @click="startIntegrityCheck(cfg)" title="校验基因组文件完整性（MD5）">
+                    <i class="bi bi-shield-check"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-warning" @click="startBlastDbCheck(cfg)" title="校验 BLAST 数据库完整性">
+                    <i class="bi bi-hdd-stack"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-teal" @click="startFaiIndex(cfg)" title="创建 FAI 索引（samtools faidx）"
+                          style="color:#20c997;border-color:#20c997">
+                    <i class="bi bi-file-earmark-binary"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" @click="openForm(cfg)" title="编辑">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-danger" @click="deleteConfig(cfg)" title="删除">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="card-body py-2 small">
+                <table class="table table-sm table-borderless mb-0">
+                  <tbody>
+                    <tr>
+                      <td class="text-muted">分类单元</td>
+                      <td class="fw-semibold" x-text="cfg.taxon"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">基因组类型</td>
+                      <td>
+                        <span class="badge" :class="cfg.genome_type === 'ref' ? 'bg-info text-dark' : 'bg-warning text-dark'"
+                              x-text="cfg.genome_type === 'ref' ? '参考基因组' : '全部基因组'"></span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">存储目录</td>
+                      <td class="font-monospace text-truncate" style="max-width:200px"
+                          :title="cfg.genome_dir" x-text="cfg.genome_dir"></td>
+                    </tr>
+                    <tr x-show="cfg.tmp_dir">
+                      <td class="text-muted">临时目录</td>
+                      <td class="font-monospace text-truncate" :title="cfg.tmp_dir" x-text="cfg.tmp_dir"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">线程数</td>
+                      <td x-text="cfg.threads"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">批次大小</td>
+                      <td x-text="cfg.batch_size"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">并行批次</td>
+                      <td x-text="cfg.parallel_downloads"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">API Key</td>
+                      <td x-text="cfg.api_key ? '●●●●●●●●' : '（未设置）'" :class="cfg.api_key ? 'text-success' : 'text-muted'"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">快速执行</td>
+                      <td>
+                        <div class="d-flex gap-1 flex-wrap">
+                          <button class="btn btn-xs btn-outline-warning"
+                                  @click="runStep(cfg, 'predownload')"
+                                  title="检查+下载到暂存区，不影响当前分析所用的基因组">
+                            <i class="bi bi-cloud-arrow-down me-1"></i>检查+预下载
+                          </button>
+                          <button class="btn btn-xs btn-outline-primary"
+                                  @click="runStep(cfg, 'merge')"
+                                  title="合并更新：将预下载目录中已验证文件归档到 live 目录">
+                            <i class="bi bi-box-arrow-in-down me-1"></i>合并更新
+                          </button>
+                          <button class="btn btn-xs btn-outline-success"
+                                  @click="runStep(cfg, 'process')"
+                                  title="格式化基因组：对已暂存文件构建 BLAST 数据库并归档">
+                            <i class="bi bi-gear me-1"></i>格式化基因组
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">配置步骤</td>
+                      <td>
+                        <div class="d-flex gap-1 flex-wrap">
+                          <span class="badge" :class="cfg.do_download ? 'bg-warning text-dark' : 'bg-secondary'">
+                            <i class="bi bi-cloud-arrow-down me-1"></i>检查+预下载
+                          </span>
+                          <span class="badge" :class="cfg.do_process  ? 'bg-success' : 'bg-secondary'">
+                            <i class="bi bi-gear me-1"></i>处理
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr x-show="cfg.pending_count > 0">
+                      <td class="text-muted">待更新</td>
+                      <td><span class="badge bg-warning text-dark" x-text="cfg.pending_count + ' 个基因组'"></span></td>
+                    </tr>
+                    <tr x-show="(cfg.predownload_count||0) > 0">
+                      <td class="text-muted">已预下载</td>
+                      <td>
+                        <span class="badge bg-info text-dark"
+                              x-text="(cfg.predownload_count||0) + ' 个（staging）'"
+                              title="已暂存到 staging 区，可立即运行"格式化基因组""></span>
+                      </td>
+                    </tr>
+                    <tr x-show="(cfg.predownload_interval_days||0) > 0 || cfg.download_interval_days > 0 || cfg.process_interval_days > 0">
+                      <td class="text-muted">自动调度</td>
+                      <td class="small">
+                        <div x-show="(cfg.predownload_interval_days||0) > 0">
+                          <i class="bi bi-cloud-arrow-down text-warning me-1"></i>检查+预下载 每<span x-text="cfg.predownload_interval_days"></span>天
+                          <span class="text-muted ms-1" x-show="cfg.next_predownload_at">· <span x-text="fmtDate(cfg.next_predownload_at)"></span></span>
+                        </div>
+                        <div x-show="cfg.download_interval_days > 0">
+                          <i class="bi bi-box-arrow-in-down text-primary me-1"></i>合并 每<span x-text="cfg.download_interval_days"></span>天
+                          <span class="text-muted ms-1" x-show="cfg.next_download_at">· <span x-text="fmtDate(cfg.next_download_at)"></span></span>
+                        </div>
+                        <div x-show="cfg.process_interval_days > 0">
+                          <i class="bi bi-gear text-success me-1"></i>格式化 每<span x-text="cfg.process_interval_days"></span>天
+                          <span class="text-muted ms-1" x-show="cfg.next_process_at">· <span x-text="fmtDate(cfg.next_process_at)"></span></span>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr x-show="cfg.last_auto_updated">
+                      <td class="text-muted">上次自动</td>
+                      <td class="text-muted" x-text="fmtDate(cfg.last_auto_updated)"></td>
+                    </tr>
+                    <tr>
+                      <td class="text-muted">更新时间</td>
+                      <td class="text-muted" x-text="fmtDate(cfg.updated_at)"></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 空状态 -->
+      <div class="card shadow-sm" x-show="configs.length === 0 && !loading">
+        <div class="card-body">
+          <div class="empty-state text-center py-5">
+            <i class="bi bi-gear d-block mb-3 fs-1 text-secondary"></i>
+            <p class="text-muted mb-3">暂无配置，点击「新建配置」保存常用下载参数</p>
+            <button class="btn btn-primary btn-sm" @click="openForm()">
+              <i class="bi bi-plus-lg me-1"></i>新建配置
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /container configs -->
+
+    <!-- ══ 配置表单 Modal ══ -->
+    <template x-teleport="body">
+      <div class="modal fade" id="configModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header" :class="editId ? 'bg-secondary text-white' : 'bg-primary text-white'">
+              <h5 class="modal-title">
+                <i class="bi me-2" :class="editId ? 'bi-pencil-fill' : 'bi-plus-circle-fill'"></i>
+                <span x-text="editId ? '编辑配置' : '新建配置'"></span>
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-3">
+
+                <div class="col-12">
+                  <label class="form-label">配置名称 <span class="text-danger">*</span></label>
+                  <input class="form-control" placeholder="如：fungi-ref、bacteria-all"
+                         x-model="form.name" />
+                  <div class="form-text">用于在「新建任务」中快速加载该配置</div>
+                </div>
+
+                <div class="col-sm-6">
+                  <label class="form-label">分类单元 <span class="text-danger">*</span></label>
+                  <input class="form-control" placeholder="如：fungi、bacteria、viruses"
+                         x-model="form.taxon" />
+                </div>
+                <div class="col-sm-6">
+                  <label class="form-label">基因组类型</label>
+                  <select class="form-select" x-model="form.genome_type">
+                    <option value="ref">参考基因组 (ref)</option>
+                    <option value="all">全部基因组 (all)</option>
+                  </select>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">自定义图标（图片）</label>
+                  <div class="d-flex align-items-center gap-2">
+                    <div style="width:56px; height:56px; border-radius:8px; overflow:hidden; background:#f6f8fa; display:flex; align-items:center; justify-content:center;">
+                      <template x-if="form.icon && form.icon.startsWith('/static')">
+                        <img :src="form.icon" alt="icon" style="max-width:100%; max-height:100%; object-fit:contain" />
+                      </template>
+                      <template x-if="!form.icon || !form.icon.startsWith('/static')">
+                        <i class="bi" :class="taxonIcon(form.taxon)" style="font-size:1.6rem"></i>
+                      </template>
+                    </div>
+                    <div style="flex:1">
+                      <input type="file" accept="image/*" class="form-control" @change="uploadIcon($event)" />
+                      <div class="form-text">支持 PNG / JPEG / SVG / GIF。上传后保存为服务器静态文件并填写路径。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">本地存储目录 <span class="text-danger">*</span></label>
+                  <input class="form-control font-monospace"
+                         placeholder="/data/genomes/fungi"
+                         x-model="form.genome_dir"
+                         @input="if(form.genome_dir && !_tmpDirEdited){ form.tmp_dir = form.genome_dir.replace(/\/+$/, '') + '/tmp'; }" />
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">临时工作目录</label>
+                  <input class="form-control font-monospace"
+                         placeholder="留空使用存储目录下的 tmp 文件夹"
+                         x-model="form.tmp_dir"
+                         @input="_tmpDirEdited = form.tmp_dir !== '' && form.tmp_dir !== form.genome_dir.replace(/\/+$/, '') + '/tmp'" />
+                  <div class="form-text">默认为存储目录下的 <code>tmp</code> 子目录。</div>
+                </div>
+
+                <div class="col-sm-4">
+                  <label class="form-label">线程数</label>
+                  <input type="number" class="form-control" min="1" max="64"
+                         x-model.number="form.threads" />
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">Taxonomy 批次大小</label>
+                  <input type="number" class="form-control" min="1"
+                         x-model.number="form.batch_size" />
+                </div>
+                <div class="col-sm-4">
+                  <label class="form-label">并行下载批次</label>
+                  <input type="number" class="form-control" min="1" max="16"
+                         x-model.number="form.parallel_downloads" />
+                </div>
+
+                <!-- 任务步骤 & 自动调度周期 -->
+                <div class="col-12">
+                  <label class="form-label fw-semibold">任务步骤 &amp; 调度周期</label>
+                  <div class="form-text mb-2">启用步骤并可选设置独立的自动执行周期</div>
+                  <table class="table table-sm table-borderless mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width:32px"></th>
+                        <th>步骤</th>
+                        <th style="width:165px">自动执行周期</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="align-middle">
+                          <input class="form-check-input" type="checkbox" x-model="form.do_download" id="chk_dl">
+                        </td>
+                        <td class="align-middle">
+                          <label class="mb-0" for="chk_dl">
+                            <i class="bi bi-cloud-arrow-down text-warning me-2"></i>检查+预下载
+                            <div class="form-text mb-0">获取 NCBI 最新元数据并下载到暂存区</div>
+                          </label>
+                        </td>
+                        <td>
+                          <select class="form-select form-select-sm" x-model.number="form.predownload_interval_days"
+                                  :disabled="!form.do_download"
+                                  @change="if (parseInt($event.target.value) > 0) form.do_download = true">
+                            <option value="0">不自动执行</option>
+                            <option value="1">每天</option>
+                            <option value="7">每周</option>
+                            <option value="30">每月</option>
+                          </select>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td class="align-middle">
+                          <input class="form-check-input" type="checkbox" x-model="form.do_process" id="chk_proc">
+                        </td>
+                        <td class="align-middle">
+                          <label class="mb-0" for="chk_proc">
+                            <i class="bi bi-gear text-success me-2"></i>格式化基因组
+                            <div class="form-text mb-0">对已暂存文件构建 BLAST 数据库并归档到 live 目录</div>
+                          </label>
+                        </td>
+                        <td>
+                          <select class="form-select form-select-sm" x-model.number="form.process_interval_days"
+                                  :disabled="!form.do_process"
+                                  @change="if (parseInt($event.target.value) > 0) form.do_process = true">
+                            <option value="0">不自动执行</option>
+                            <option value="1">每天</option>
+                            <option value="7">每周</option>
+                            <option value="30">每月</option>
+                          </select>
+                        </td>
+                      </tr>
+                      <tr class="table-light">
+                        <td class="align-middle text-center">
+                          <i class="bi bi-box-arrow-in-down text-primary"></i>
+                        </td>
+                        <td class="align-middle">
+                          <span class="fw-semibold">合并更新</span>
+                          <div class="form-text mb-0">将预下载目录中已验证的基因组归档到 live 目录，更新 md5 和元数据</div>
+                        </td>
+                        <td>
+                          <select class="form-select form-select-sm" x-model.number="form.download_interval_days">
+                            <option value="0">不自动执行</option>
+                            <option value="1">每天</option>
+                            <option value="7">每周</option>
+                            <option value="30">每月</option>
+                          </select>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="col-12">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" x-model="form.overwrite" id="chk_overwrite">
+                    <label class="form-check-label" for="chk_overwrite">强制刷新远端元数据</label>
+                  </div>
+                  <div class="form-text">勾选后，执行检查步骤时将重新从 NCBI 拉取元数据，忽略本地缓存文件。</div>
+                </div>
+
+                <div class="col-sm-6">
+                  <label class="form-label">当前基因组更新日期</label>
+                  <input type="date" class="form-control" x-model="form.genome_date" />
+                  <div class="form-text">手动记录本批次基因组所对应的 NCBI 更新日期，仅用于展示。</div>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">NCBI API Key</label>
+                  <div class="input-group">
+                    <input :type="showKey ? 'text' : 'password'"
+                           class="form-control font-monospace"
+                           :placeholder="editId ? '留空保留原有 Key' : '留空使用匿名访问（每秒 3 次请求）'"
+                           x-model="form.api_key" />
+                    <button class="btn btn-outline-secondary" type="button"
+                            @click="showKey = !showKey">
+                      <i class="bi" :class="showKey ? 'bi-eye-slash' : 'bi-eye'"></i>
+                    </button>
+                  </div>
+                  <div class="form-text">
+                    使用 API Key 可将请求频率从 3次/秒 提升到 10次/秒。
+                    在 <a href="https://www.ncbi.nlm.nih.gov/account/" target="_blank">NCBI 账户</a> 中申请。
+                  </div>
+                </div>
+
+              </div>
+              <div class="alert alert-danger mt-3 py-2 small" x-show="formError" x-text="formError"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="button" class="btn" :class="editId ? 'btn-secondary' : 'btn-primary'"
+                      @click="saveConfig()" :disabled="saving">
+                <span x-show="saving" class="spinner-border spinner-sm me-1"></span>
+                <i class="bi me-1" :class="editId ? 'bi-check-lg' : 'bi-plus-lg'" x-show="!saving"></i>
+                <span x-text="editId ? '保存修改' : '创建配置'"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /configModal teleport -->
+
+    <!-- ══ 使用配置创建任务 Modal ══ -->
+    <template x-teleport="body">
+      <div class="modal fade" id="useConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+              <h5 class="modal-title">
+                <i class="bi bi-play-circle-fill me-2"></i>使用配置创建任务
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" x-show="selectedCfg">
+              <p class="text-muted small mb-3">确认使用以下配置提交一个新的下载任务：</p>
+              <table class="table table-sm table-borderless small">
+                <tr><td class="text-muted" style="width:110px">配置名称</td><td class="fw-semibold" x-text="selectedCfg?.name"></td></tr>
+                <tr><td class="text-muted">分类单元</td><td x-text="selectedCfg?.taxon"></td></tr>
+                <tr><td class="text-muted">基因组类型</td><td x-text="selectedCfg?.genome_type"></td></tr>
+                <tr><td class="text-muted">存储目录</td><td class="font-monospace" x-text="selectedCfg?.genome_dir"></td></tr>
+                <tr><td class="text-muted">线程数</td><td x-text="selectedCfg?.threads"></td></tr>
+              </table>
+              <div class="alert alert-danger mt-2 py-2 small" x-show="useError" x-text="useError"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+              <button type="button" class="btn btn-primary" @click="submitFromConfig()" :disabled="submitting">
+                <span x-show="submitting" class="spinner-border spinner-sm me-1"></span>
+                <i class="bi bi-play-fill me-1" x-show="!submitting"></i>
+                立即提交任务
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /useConfigModal teleport -->
+
+    <!-- ══ 完整性校验 Modal ══ -->
+    <template x-teleport="body">
+      <div class="modal fade" id="integrityModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header" style="background:#17a2b8;color:#fff">
+              <h5 class="modal-title">
+                <i class="bi bi-shield-check me-2"></i>基因组完整性校验
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" x-show="integrityState">
+              <div class="text-muted small mb-3">
+                <i class="bi bi-folder2 me-1"></i>
+                <span x-text="integrityState?.genome_dir"></span>
+              </div>
+              <div class="mb-3">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span x-text="integrityState?.status === 'running'
+                    ? '校验中...'
+                    : (integrityState?.status === 'cancelling'
+                      ? '正在取消...'
+                      : (integrityState?.status === 'cancelled' ? '已取消' : '校验完成'))"></span>
+                  <span>
+                    <span x-text="integrityState?.current || 0"></span> /
+                    <span x-text="integrityState?.total || 0"></span>
+                  </span>
+                </div>
+                <div class="progress" style="height:16px">
+                  <div class="progress-bar progress-bar-striped"
+                       :class="(integrityState?.status === 'running' || integrityState?.status === 'cancelling')
+                         ? 'progress-bar-animated bg-info'
+                         : (integrityState?.status === 'cancelled'
+                           ? 'bg-secondary'
+                           : ((integrityState?.failed || 0) + (integrityState?.missing || 0) > 0 ? 'bg-danger' : 'bg-success'))"
+                       :style="`width: ${
+                         integrityState?.total > 0
+                           ? Math.round((integrityState.current / integrityState.total) * 100)
+                           : ((integrityState?.status === 'running' || integrityState?.status === 'cancelling') ? 100 : 0)
+                       }%`">
+                  </div>
+                </div>
+                <div class="text-muted small mt-1" x-show="(integrityState?.status === 'running' || integrityState?.status === 'cancelling') && integrityState?.current_file">
+                  正在检查：<code x-text="integrityState?.current_file"></code>
+                </div>
+              </div>
+              <div class="row g-2 mb-3" x-show="(integrityState?.total || 0) > 0">
+                <div class="col-3">
+                  <div class="card text-center p-2 bg-light">
+                    <div class="fw-bold" x-text="integrityState?.total || 0"></div>
+                    <div class="text-muted small">总计</div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card text-center p-2" style="background:#d4edda">
+                    <div class="fw-bold text-success" x-text="integrityState?.passed || 0"></div>
+                    <div class="text-muted small">通过</div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card text-center p-2" style="background:#f8d7da">
+                    <div class="fw-bold text-danger" x-text="integrityState?.failed || 0"></div>
+                    <div class="text-muted small">MD5 不符</div>
+                  </div>
+                </div>
+                <div class="col-3">
+                  <div class="card text-center p-2" style="background:#fff3cd">
+                    <div class="fw-bold text-warning" x-text="integrityState?.missing || 0"></div>
+                    <div class="text-muted small">文件缺失</div>
+                  </div>
+                </div>
+              </div>
+              <div x-show="integrityState?.status === 'done' && integrityState?.total === 0"
+                   class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                未找到 MD5 记录文件，请先完成下载步骤以生成 md5sums 文件。
+              </div>
+              <template x-if="integrityState?.status === 'done' && integrityState?.total > 0">
+                <div>
+                  <template x-if="(integrityState.failed || 0) === 0 && (integrityState.missing || 0) === 0">
+                    <div class="alert alert-success">
+                      <i class="bi bi-shield-check me-2"></i>
+                      所有 <strong x-text="integrityState.total"></strong> 个基因组文件校验通过，完整性良好。
+                    </div>
+                  </template>
+                  <template x-if="(integrityState.failed || 0) > 0 || (integrityState.missing || 0) > 0">
+                    <div>
+                      <div class="alert alert-danger">
+                        <i class="bi bi-shield-x me-2"></i>
+                        发现 <strong x-text="(integrityState.failed||0) + (integrityState.missing||0)"></strong>
+                        个异常文件，建议重新下载受损文件。
+                      </div>
+                      <div x-show="(integrityState.failed||0) > 0" class="mb-3">
+                        <div class="fw-semibold small mb-2 text-danger">
+                          <i class="bi bi-exclamation-circle me-1"></i>MD5 校验失败：
+                        </div>
+                        <div class="border rounded p-2" style="max-height:200px;overflow-y:auto;background:#fdf2f2">
+                          <template x-for="f in integrityState.failed_files" :key="f.gca">
+                            <div class="font-monospace small text-danger py-1 border-bottom">
+                              <span x-text="f.gca"></span>
+                              <span class="text-muted ms-2 small">
+                                期望: <span x-text="(f.expected||'').substring(0,8)+'...'"></span>
+                                &nbsp;实际: <span x-text="(f.actual||'').substring(0,8)+'...'"></span>
+                              </span>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                      <div x-show="(integrityState.missing||0) > 0">
+                        <div class="fw-semibold small mb-2 text-warning">
+                          <i class="bi bi-file-x me-1"></i>文件缺失：
+                        </div>
+                        <div class="border rounded p-2" style="max-height:160px;overflow-y:auto;background:#fffdf0">
+                          <template x-for="gca in integrityState.missing_files" :key="gca">
+                            <div class="font-monospace small text-warning py-1 border-bottom" x-text="gca"></div>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <div class="text-muted small mt-3" x-show="integrityState?.started_at">
+                <i class="bi bi-cpu me-1"></i>
+                并行线程数: <span x-text="integrityState?.workers || 1"></span>
+                <br>
+                <i class="bi bi-clock me-1"></i>
+                开始: <span x-text="integrityState?.started_at"></span>
+                <span x-show="integrityState?.finished_at">
+                  &nbsp;· 完成: <span x-text="integrityState?.finished_at"></span>
+                </span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                      x-text="(integrityState?.status === 'running' || integrityState?.status === 'cancelling') ? '后台运行' : '关闭'"></button>
+              <button type="button" class="btn btn-outline-danger"
+                      x-show="integrityState?.status === 'running'"
+                      @click="cancelIntegrityCheck()">
+                <i class="bi bi-stop-circle me-1"></i>取消校验
+              </button>
+              <button type="button" class="btn btn-outline-primary"
+                      x-show="['done', 'cancelled', 'failed'].includes(integrityState?.status)"
+                      @click="rerunIntegrityCheck()">
+                <i class="bi bi-arrow-clockwise me-1"></i>重新校验
+              </button>
+              <button type="button" class="btn btn-danger"
+                      x-show="integrityState?.status === 'done'
+                        && ((integrityState?.failed || 0) + (integrityState?.missing || 0)) > 0
+                        && integrityState?.config_id"
+                      @click="repairIntegrity()">
+                <i class="bi bi-wrench me-1"></i>
+                修复损坏文件
+                <span class="badge bg-light text-dark ms-1"
+                      x-text="(integrityState?.failed||0) + (integrityState?.missing||0)"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /integrityModal teleport -->
+
+    <!-- ══ BLAST 数据库校验 Modal ══ -->
+    <template x-teleport="body">
+      <div class="modal fade" id="blastDbModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header" style="background:#e67e22;color:#fff">
+              <h5 class="modal-title">
+                <i class="bi bi-hdd-stack me-2"></i>BLAST 数据库完整性校验
+              </h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" x-show="blastDbState">
+              <div class="text-muted small mb-3">
+                <i class="bi bi-folder2 me-1"></i>
+                <span x-text="blastDbState?.genome_dir"></span>
+              </div>
+
+              <!-- 阶段标签 -->
+              <div class="mb-2 small">
+                <template x-if="blastDbState?.status === 'running'">
+                  <span class="badge"
+                        :class="blastDbState.phase === 'scanning' ? 'bg-warning text-dark' : 'bg-primary'">
+                    <span x-text="blastDbState.phase === 'scanning' ? '扫描中…' : 'blastdbcmd 校验中…'"></span>
+                  </span>
+                </template>
+                <template x-if="blastDbState?.status === 'cancelling'">
+                  <span class="badge bg-secondary">正在取消…</span>
+                </template>
+                <template x-if="blastDbState?.status === 'done'">
+                  <span class="badge" :class="(blastDbState.invalid||0) > 0 ? 'bg-danger' : 'bg-success'">
+                    <span x-text="(blastDbState.invalid||0) > 0 ? '发现问题' : '校验完成'"></span>
+                  </span>
+                </template>
+                <template x-if="blastDbState?.status === 'cancelled'">
+                  <span class="badge bg-secondary">已取消</span>
+                </template>
+                <template x-if="blastDbState?.status === 'failed'">
+                  <span class="badge bg-danger">执行失败</span>
+                </template>
+              </div>
+
+              <!-- 校验进度条 -->
+              <div class="mb-3"
+                   x-show="(blastDbState?.total || 0) > 0 || blastDbState?.status === 'running'">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span>数据库校验进度</span>
+                  <span x-text="(blastDbState?.current || 0) + ' / ' + (blastDbState?.total || 0)"></span>
+                </div>
+                <div class="progress" style="height:14px">
+                  <div class="progress-bar progress-bar-striped"
+                       :class="(blastDbState?.status === 'running' || blastDbState?.status === 'cancelling')
+                         ? 'progress-bar-animated bg-primary'
+                         : (blastDbState?.status === 'cancelled' ? 'bg-secondary'
+                           : ((blastDbState?.invalid || 0) > 0 ? 'bg-danger' : 'bg-success'))"
+                       :style="`width:${
+                         blastDbState?.total > 0
+                           ? Math.round((blastDbState.current / blastDbState.total) * 100)
+                           : ((blastDbState?.status === 'running' || blastDbState?.status === 'cancelling') ? 100 : 0)
+                       }%`">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 统计卡片 -->
+              <div class="row g-2 mb-3" x-show="(blastDbState?.total || 0) > 0">
+                <div class="col-4">
+                  <div class="card text-center p-2 bg-light">
+                    <div class="fw-bold" x-text="blastDbState?.total || 0"></div>
+                    <div class="text-muted small">总计</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card text-center p-2" style="background:#d4edda">
+                    <div class="fw-bold text-success" x-text="blastDbState?.valid || 0"></div>
+                    <div class="text-muted small">校验通过</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card text-center p-2" style="background:#f8d7da">
+                    <div class="fw-bold text-danger" x-text="blastDbState?.invalid || 0"></div>
+                    <div class="text-muted small">校验失败</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 未找到数据库 -->
+              <div x-show="blastDbState?.status === 'done' && blastDbState?.total === 0"
+                   class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                未找到已建库的 BLAST 数据库，请先完成「格式化基因组」步骤以建库。
+              </div>
+
+              <!-- 全部通过 -->
+              <template x-if="blastDbState?.status === 'done' && (blastDbState?.total || 0) > 0 && (blastDbState?.invalid || 0) === 0">
+                <div class="alert alert-success">
+                  <i class="bi bi-hdd-stack me-2"></i>
+                  所有 <strong x-text="blastDbState.total"></strong> 个 BLAST 数据库校验通过，完整性良好。
+                </div>
+              </template>
+
+              <!-- 失败列表（支持翻页） -->
+              <template x-if="(blastDbState?.failed_gcas || []).length > 0">
+                <div>
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold small text-danger">
+                      <i class="bi bi-exclamation-circle me-1"></i>
+                      校验失败的数据库（<span x-text="(blastDbState.failed_gcas||[]).length"></span> 个）：
+                    </div>
+                    <div class="d-flex align-items-center gap-2"
+                         x-show="(blastDbState.failed_gcas||[]).length > blastDbPageSize">
+                      <span class="small text-muted">
+                        第 <span x-text="blastDbPage + 1"></span> /
+                        <span x-text="Math.ceil((blastDbState.failed_gcas||[]).length / blastDbPageSize)"></span> 页
+                      </span>
+                      <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary"
+                                :disabled="blastDbPage === 0"
+                                @click="blastDbPage = Math.max(0, blastDbPage - 1)">
+                          <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <button class="btn btn-outline-secondary"
+                                :disabled="(blastDbPage + 1) * blastDbPageSize >= (blastDbState.failed_gcas||[]).length"
+                                @click="blastDbPage++">
+                          <i class="bi bi-chevron-right"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="border rounded" style="background:#fdf2f2">
+                    <template x-for="item in (blastDbState.failed_gcas||[]).slice(blastDbPage * blastDbPageSize, (blastDbPage + 1) * blastDbPageSize)" :key="item.gca">
+                      <div class="d-flex align-items-start gap-2 px-3 py-2 border-bottom">
+                        <span class="font-monospace small fw-semibold text-danger flex-shrink-0"
+                              x-text="item.gca"></span>
+                        <span class="text-muted small text-truncate ms-auto"
+                              style="max-width:55%"
+                              :title="item.error"
+                              x-show="item.error"
+                              x-text="item.error"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="text-muted small mt-1 text-end"
+                       x-show="(blastDbState.failed_gcas||[]).length > blastDbPageSize">
+                    显示第 <span x-text="blastDbPage * blastDbPageSize + 1"></span>–<span
+                      x-text="Math.min((blastDbPage + 1) * blastDbPageSize, (blastDbState.failed_gcas||[]).length)"></span>
+                    条，共 <span x-text="(blastDbState.failed_gcas||[]).length"></span> 条
+                  </div>
+                </div>
+              </template>
+
+              <!-- 运行时错误 -->
+              <div class="alert alert-danger mt-2 small" x-show="blastDbState?.error">
+                <i class="bi bi-bug me-1"></i><span x-text="blastDbState?.error"></span>
+              </div>
+
+              <div class="text-muted small mt-3" x-show="blastDbState?.started_at">
+                <i class="bi bi-cpu me-1"></i>
+                并行线程数: <span x-text="blastDbState?.workers || 1"></span>
+                <br>
+                <i class="bi bi-clock me-1"></i>
+                开始: <span x-text="blastDbState?.started_at"></span>
+                <span x-show="blastDbState?.finished_at">
+                  &nbsp;· 完成: <span x-text="blastDbState?.finished_at"></span>
+                </span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                      x-text="(blastDbState?.status === 'running' || blastDbState?.status === 'cancelling') ? '后台运行' : '关闭'"></button>
+              <button type="button" class="btn btn-outline-danger"
+                      x-show="blastDbState?.status === 'running'"
+                      @click="cancelBlastDbCheck()">
+                <i class="bi bi-stop-circle me-1"></i>取消校验
+              </button>
+              <button type="button" class="btn btn-outline-primary"
+                      x-show="['done', 'cancelled', 'failed'].includes(blastDbState?.status)"
+                      @click="rerunBlastDbCheck()">
+                <i class="bi bi-arrow-clockwise me-1"></i>重新校验
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /blastDbModal teleport -->
+
+    <!-- ════════ FAI 索引构建 Modal ════════ -->
+    <template x-teleport="body">
+      <div class="modal fade" id="faiIndexModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">
+                <i class="bi bi-file-earmark-binary me-2"></i>创建 FAI 索引
+              </h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="text-muted small mb-3" x-show="faiState?.genome_dir">
+                <i class="bi bi-folder me-1"></i><span x-text="faiState?.genome_dir"></span>
+              </div>
+
+              <!-- 状态标签 -->
+              <div class="mb-2 small">
+                <template x-if="faiState?.status === 'running'">
+                  <span class="badge bg-primary">索引创建中…</span>
+                </template>
+                <template x-if="faiState?.status === 'cancelling'">
+                  <span class="badge bg-secondary">正在取消…</span>
+                </template>
+                <template x-if="faiState?.status === 'done'">
+                  <span class="badge"
+                        :class="(faiState.failed_gcas||[]).length > 0 ? 'bg-warning text-dark' : 'bg-success'">
+                    <span x-text="(faiState.failed_gcas||[]).length > 0 ? '部分失败' : '完成'"></span>
+                  </span>
+                </template>
+                <template x-if="faiState?.status === 'cancelled'">
+                  <span class="badge bg-secondary">已取消</span>
+                </template>
+                <template x-if="faiState?.status === 'failed'">
+                  <span class="badge bg-danger">执行失败</span>
+                </template>
+              </div>
+
+              <!-- 进度条 -->
+              <div class="mb-3"
+                   x-show="(faiState?.total || 0) > 0 || faiState?.status === 'running'">
+                <div class="d-flex justify-content-between small mb-1">
+                  <span>索引创建进度</span>
+                  <span x-text="(faiState?.current || 0) + ' / ' + ((faiState?.total || 0) - (faiState?.skipped || 0))"></span>
+                </div>
+                <div class="progress" style="height:14px">
+                  <div class="progress-bar progress-bar-striped"
+                       :class="(faiState?.status === 'running' || faiState?.status === 'cancelling')
+                         ? 'progress-bar-animated bg-primary'
+                         : (faiState?.status === 'cancelled' ? 'bg-secondary'
+                           : ((faiState?.failed_gcas||[]).length > 0 ? 'bg-warning' : 'bg-success'))"
+                       :style="`width:${(() => {
+                         const need = (faiState?.total || 0) - (faiState?.skipped || 0);
+                         if (need <= 0) return faiState?.status === 'done' ? 100 : 0;
+                         if (faiState?.status === 'running' || faiState?.status === 'cancelling')
+                           return need > 0 ? Math.round((faiState.current / need) * 100) : 100;
+                         return need > 0 ? Math.round(((faiState?.built||0) / need) * 100) : 100;
+                       })()}%`">
+                  </div>
+                </div>
+              </div>
+
+              <!-- 统计卡片 -->
+              <div class="row g-2 mb-3" x-show="(faiState?.total || 0) > 0">
+                <div class="col-4">
+                  <div class="card text-center p-2 bg-light">
+                    <div class="fw-bold" x-text="faiState?.total || 0"></div>
+                    <div class="text-muted small">总计</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card text-center p-2" style="background:#d4edda">
+                    <div class="fw-bold text-success" x-text="(faiState?.built || 0) + (faiState?.skipped || 0)"></div>
+                    <div class="text-muted small">已有/新建</div>
+                  </div>
+                </div>
+                <div class="col-4">
+                  <div class="card text-center p-2" style="background:#f8d7da">
+                    <div class="fw-bold text-danger" x-text="(faiState?.failed_gcas||[]).length"></div>
+                    <div class="text-muted small">失败</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 全部完成提示 -->
+              <template x-if="faiState?.status === 'done' && (faiState?.total || 0) > 0 && (faiState?.failed_gcas||[]).length === 0">
+                <div class="alert alert-success">
+                  <i class="bi bi-check-circle me-2"></i>
+                  全部完成：新建 <strong x-text="faiState.built"></strong> 个，
+                  跳过已有 <strong x-text="faiState.skipped"></strong> 个。
+                </div>
+              </template>
+
+              <!-- 无需建索引提示 -->
+              <div x-show="faiState?.status === 'done' && (faiState?.total || 0) === 0"
+                   class="alert alert-info">
+                <i class="bi bi-info-circle me-2"></i>
+                未发现需要创建索引的基因组文件（目录为空或均已有 .fai）。
+              </div>
+
+              <!-- 失败列表 -->
+              <template x-if="(faiState?.failed_gcas||[]).length > 0">
+                <div>
+                  <div class="fw-semibold small text-danger mb-2">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    创建失败（<span x-text="(faiState.failed_gcas||[]).length"></span> 个）：
+                  </div>
+                  <div class="border rounded" style="background:#fdf2f2;max-height:180px;overflow-y:auto">
+                    <template x-for="item in faiState.failed_gcas" :key="item.gca">
+                      <div class="d-flex align-items-start gap-2 px-3 py-2 border-bottom">
+                        <span class="font-monospace small fw-semibold text-danger flex-shrink-0"
+                              x-text="item.gca"></span>
+                        <span class="text-muted small text-truncate ms-auto"
+                              style="max-width:60%"
+                              :title="item.error"
+                              x-show="item.error"
+                              x-text="item.error"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 运行时错误 -->
+              <div class="alert alert-danger mt-2 small" x-show="faiState?.error">
+                <i class="bi bi-bug me-1"></i><span x-text="faiState?.error"></span>
+              </div>
+
+              <div class="text-muted small mt-3" x-show="faiState?.started_at">
+                <i class="bi bi-clock me-1"></i>
+                开始: <span x-text="faiState?.started_at"></span>
+                <span x-show="faiState?.finished_at">
+                  &nbsp;· 完成: <span x-text="faiState?.finished_at"></span>
+                </span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                      x-text="(faiState?.status === 'running' || faiState?.status === 'cancelling') ? '后台运行' : '关闭'"></button>
+              <button type="button" class="btn btn-outline-danger"
+                      x-show="faiState?.status === 'running'"
+                      @click="cancelFaiIndex()">
+                <i class="bi bi-stop-circle me-1"></i>取消
+              </button>
+              <button type="button" class="btn btn-outline-primary"
+                      x-show="['done', 'cancelled', 'failed'].includes(faiState?.status)"
+                      @click="rerunFaiIndex()">
+                <i class="bi bi-arrow-clockwise me-1"></i>重新创建
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template><!-- /faiIndexModal teleport -->
+
+  </div><!-- /configs panel -->
+
+</div><!-- /adminShell x-data -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<script>
+// ── 外层壳：仅管理 tab 切换 ──────────────────────────────────
+function adminShell() {
+  return {
+    activeTab: new URLSearchParams(location.search).get('tab') || 'tasks',
+    adminUser: 'admin',
+    switchTab(tab) {
+      this.activeTab = tab;
+      const url = new URL(location.href);
+      url.searchParams.set('tab', tab);
+      history.replaceState({}, '', url);
+    },
+  };
+}
+
+// ══════════════════════ 任务管理 ══════════════════════
+function dashboard() {
+  return {
+    tasks:       [],
+    totalTasks:  0,
+    taskOffset:  0,
+    pageSize:    50,
+    filterStatus: '',
+    stats:       {},
+    loading:     false,
+    selectedIds: new Set(),
+    selectedTask: null,
+    logLines:     [],
+    _logES:       null,
+    _refreshTimer: null,
+
+    async init() {
+      await this.fetchAll();
+      this._refreshTimer = setInterval(() => this.fetchAll(), 5000);
+    },
+
+    async fetchAll() {
+      await Promise.all([this.fetchStats(), this.fetchTasks()]);
+    },
+
+    async fetchTasks() {
+      this.loading = true;
+      try {
+        const url = `/api/tasks?limit=${this.pageSize}&offset=${this.taskOffset}`
+                  + (this.filterStatus ? `&status=${this.filterStatus}` : '');
+        const data = await apiGet(url);
+        this.tasks      = data.items;
+        this.totalTasks = data.total;
+        const idSet = new Set(data.items.map(t => t.id));
+        this.selectedIds = new Set([...this.selectedIds].filter(id => idSet.has(id)));
+      } catch(e) { showToast('获取任务列表失败：' + e.message, 'danger'); }
+      finally    { this.loading = false; }
+    },
+
+    async fetchStats() {
+      try { this.stats = await apiGet('/api/stats'); }
+      catch(e) { /* 忽略 */ }
+    },
+
+    get allSelected() {
+      return this.tasks.length > 0 && this.tasks.every(t => this.selectedIds.has(t.id));
+    },
+    get someSelected() {
+      return this.selectedIds.size > 0 && !this.allSelected;
+    },
+    toggleSelectAll(checked) {
+      if (checked) this.tasks.forEach(t => this.selectedIds.add(t.id));
+      else          this.tasks.forEach(t => this.selectedIds.delete(t.id));
+      this.selectedIds = new Set(this.selectedIds);
+    },
+    toggleSelect(id) {
+      const s = new Set(this.selectedIds);
+      s.has(id) ? s.delete(id) : s.add(id);
+      this.selectedIds = s;
+    },
+    async deleteSelected() {
+      const ids = [...this.selectedIds];
+      if (!ids.length) return;
+      if (!confirm(`确认删除选中的 ${ids.length} 条任务记录（含日志）？此操作不可撤销。`)) return;
+      try {
+        await apiPost('/api/tasks/batch-delete', { ids });
+        showToast(`已删除 ${ids.length} 条任务`, 'success');
+        this.selectedIds = new Set();
+        await this.fetchAll();
+      } catch(e) { showToast('删除失败：' + e.message, 'danger'); }
+    },
+
+    async cancelTask(task) {
+      if (!confirm(`确认取消任务 #${task.id}（${task.taxon}）？`)) return;
+      try {
+        await apiDelete('/api/tasks/' + task.id);
+        showToast(`任务 #${task.id} 已取消`, 'warning');
+        await this.fetchAll();
+      } catch(e) { showToast('取消失败：' + e.message, 'danger'); }
+    },
+
+    async viewTask(task) {
+      this.selectedTask = task;
+      this.logLines     = [];
+      this.stopLogStream();
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('logModal'));
+      modal.show();
+      try {
+        const data = await apiGet(`/api/tasks/${task.id}/logs`);
+        for (const log of data.logs) this.logLines.push(log.content);
+        this.$nextTick(() => this.scrollLogBottom());
+        if (['pending', 'running'].includes(data.status)) {
+          const lastId = data.logs.length ? data.logs[data.logs.length - 1].id : 0;
+          this.startLogStream(task.id, lastId);
+        }
+      } catch(e) { this.logLines.push('[ERROR] 获取日志失败：' + e.message); }
+    },
+
+    startLogStream(taskId, afterId) {
+      const url = `/api/tasks/${taskId}/logs/stream?after_id=${afterId || 0}`;
+      this._logES = new EventSource(url);
+      this._logES.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.event === 'done') {
+          this.stopLogStream();
+          apiGet(`/api/tasks/${taskId}`).then(t => { this.selectedTask = t; });
+          this.fetchAll();
+          return;
+        }
+        if (msg.event === 'error') { this.logLines.push('[ERROR] ' + msg.detail); return; }
+        if (msg.content) {
+          this.logLines.push(msg.content);
+          this.$nextTick(() => this.scrollLogBottom());
+        }
+      };
+      this._logES.onerror = () => this.stopLogStream();
+    },
+
+    stopLogStream() {
+      if (this._logES) { this._logES.close(); this._logES = null; }
+    },
+
+    scrollLogBottom() {
+      const el = document.getElementById('logViewer');
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+
+    fmtDate,
+    fmtSize,
+    statusBadge,
+    statusIcon,
+    logLineClass,
+    statusLabel(s) {
+      const m = { pending:'等待中', running:'运行中', done:'已完成', failed:'失败', cancelled:'已取消' };
+      return m[s] || s;
+    },
+  };
+}
+
+// ══════════════════════ 配置管理 ══════════════════════
+function configManager() {
+  return {
+    configs:  [],
+    loading:  false,
+
+    editId:   null,
+    form: {
+      name: '', taxon: '', genome_type: 'ref', genome_dir: '', tmp_dir: '',
+      threads: 4, batch_size: 500, parallel_downloads: 4, api_key: '',
+      do_check: false, do_download: false, do_process: false,
+      predownload_interval_days: 0, download_interval_days: 0, process_interval_days: 0,
+      overwrite: false, genome_date: '', icon: '',
+    },
+    _tmpDirEdited: false,
+    showKey:  false,
+    saving:   false,
+    formError: '',
+
+    selectedCfg: null,
+    submitting:  false,
+    useError:    '',
+
+    integrityState:  null,
+    _integrityTimer: null,
+    _integrityCheckId: null,
+
+    blastDbState:    null,
+    _blastDbTimer:   null,
+    _blastDbCheckId: null,
+    blastDbPage:     0,
+    blastDbPageSize: 20,
+
+    faiState:    null,
+    _faiTimer:   null,
+    _faiTaskId:  null,
+
+    async init() {
+      await this.fetchConfigs();
+    },
+
+    async fetchConfigs() {
+      this.loading = true;
+      try {
+        this.configs = await apiGet('/api/configs');
+      } catch(e) { showToast('获取配置失败：' + e.message, 'danger'); }
+      finally    { this.loading = false; }
+    },
+
+    async exportConfigs() {
+      try {
+        // 询问是否包含敏感字段
+        const includeSecrets = confirm('是否在导出中包含 API Key 等敏感字段？(取消将隐藏)');
+        const res = await fetch('/api/configs/export?include_secrets=' + (includeSecrets ? '1' : '0'));
+        if (!res.ok) throw new Error('导出失败');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'taxon_configs_export.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('导出成功', 'success');
+      } catch(e) {
+        showToast('导出失败：' + e.message, 'danger');
+      }
+    },
+
+    triggerImport() {
+      document.getElementById('importConfigsFile').value = '';
+      document.getElementById('importConfigsFile').click();
+    },
+
+    async handleImportFile(evt) {
+      const f = evt.target.files && evt.target.files[0];
+      if (!f) return;
+      try {
+        const text = await f.text();
+        const parsed = JSON.parse(text);
+        // 支持直接传入数组或 {configs: [...]} 结构
+        const configs = Array.isArray(parsed) ? parsed : parsed.configs ? parsed.configs : null;
+        if (!configs || !Array.isArray(configs)) {
+          throw new Error('JSON 必须是配置数组或包含 configs 字段的对象');
+        }
+        const replace = confirm('是否替换现有配置？选择否将合并（以 taxon+genome_dir 为键进行更新）');
+        const body = { configs: configs, replace: replace };
+        const res = await fetch('/api/configs/import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || '导入失败');
+        }
+        const data = await res.json();
+        showToast(`导入完成：创建 ${data.created}，更新 ${data.updated}`, 'success');
+        await this.fetchConfigs();
+      } catch(e) {
+        showToast('导入失败：' + e.message, 'danger');
+      }
+    },
+
+    async uploadIcon(evt) {
+      const f = evt.target.files && evt.target.files[0];
+      if (!f) return;
+      const fd = new FormData();
+      fd.append('file', f);
+      try {
+        const res = await fetch('/api/upload/icon', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || '上传失败');
+        }
+        const data = await res.json();
+        this.form.icon = data.path;
+        showToast('图标上传成功', 'success');
+      } catch(e) {
+        showToast('图标上传失败：' + e.message, 'danger');
+      }
+    },
+
+    openForm(cfg = null) {
+      this.formError = '';
+      this.showKey   = false;
+      if (cfg) {
+        this.editId = cfg.id;
+        this._tmpDirEdited = !!cfg.tmp_dir;
+        this.form = {
+          name:                 cfg.name,
+          taxon:                cfg.taxon,
+          genome_type:          cfg.genome_type,
+          genome_dir:           cfg.genome_dir,
+          tmp_dir:              cfg.tmp_dir || '',
+          threads:              cfg.threads,
+          batch_size:           cfg.batch_size,
+          parallel_downloads:   cfg.parallel_downloads,
+          api_key:              '',
+          do_check:    cfg.do_check    !== undefined ? !!cfg.do_check    : true,
+          do_download: cfg.do_download !== undefined ? !!cfg.do_download : true,
+          do_process:  cfg.do_process  !== undefined ? !!cfg.do_process  : true,
+          overwrite:   !!cfg.overwrite,
+          predownload_interval_days: cfg.predownload_interval_days || 0,
+          download_interval_days:    cfg.download_interval_days    || 0,
+          process_interval_days:     cfg.process_interval_days     || 0,
+          genome_date: cfg.genome_date ? cfg.genome_date.slice(0,10) : '',
+          icon:        cfg.icon || '',
+        };
+      } else {
+        this.editId = null;
+        this._tmpDirEdited = false;
+        this.form = {
+          name:'', taxon:'', genome_type:'ref', genome_dir:'', tmp_dir:'',
+          threads:4, batch_size:500, parallel_downloads:4, api_key:'',
+          do_check: true, do_download: true, do_process: true, overwrite: false,
+          predownload_interval_days: 0, download_interval_days: 0, process_interval_days: 0,
+          genome_date: '', icon: '',
+        };
+      }
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('configModal')).show();
+    },
+
+    async saveConfig() {
+      this.formError = '';
+      if (!this.form.name.trim())       { this.formError = '请填写配置名称'; return; }
+      if (!this.form.taxon.trim())      { this.formError = '请填写分类单元'; return; }
+      if (!this.form.genome_dir.trim()) { this.formError = '请填写存储目录'; return; }
+
+      const payload = { ...this.form };
+      payload.do_check = payload.do_download;
+      if (!payload.tmp_dir)  delete payload.tmp_dir;
+      if (!payload.api_key)  delete payload.api_key;
+      if (!payload.icon)     delete payload.icon;
+
+      this.saving = true;
+      try {
+        if (this.editId) {
+          await apiPut(`/api/configs/${this.editId}`, payload);
+          showToast('配置已更新', 'success');
+        } else {
+          await apiPost('/api/configs', payload);
+          showToast('配置已创建', 'success');
+        }
+        bootstrap.Modal.getInstance(document.getElementById('configModal'))?.hide();
+        await this.fetchConfigs();
+      } catch(e) { this.formError = e.message; }
+      finally    { this.saving = false; }
+    },
+
+    async triggerConfig(cfg) {
+      if (!confirm(`立即为「${cfg.name}」提交更新任务？`)) return;
+      try {
+        const res = await fetch(`/api/configs/${cfg.id}/trigger`, { method: 'POST' });
+        if (!res.ok) throw new Error((await res.json()).detail);
+        const data = await res.json();
+        showToast(`任务 #${data.task_id} 已提交`, 'success');
+        await this.fetchConfigs();
+      } catch(e) { showToast('触发失败：' + e.message, 'danger'); }
+    },
+
+    async deleteConfig(cfg) {
+      if (!confirm(`确认删除配置「${cfg.name}」？此操作不可恢复。`)) return;
+      try {
+        await apiDelete(`/api/configs/${cfg.id}`);
+        showToast(`配置「${cfg.name}」已删除`, 'warning');
+        await this.fetchConfigs();
+      } catch(e) { showToast('删除失败：' + e.message, 'danger'); }
+    },
+
+    useConfig(cfg) {
+      this.selectedCfg = cfg;
+      this.useError    = '';
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('useConfigModal')).show();
+    },
+
+    async submitFromConfig() {
+      if (!this.selectedCfg) return;
+      this.useError = '';
+      this.submitting = true;
+      try {
+        const payload = {
+          taxon:              this.selectedCfg.taxon,
+          genome_type:        this.selectedCfg.genome_type,
+          genome_dir:         this.selectedCfg.genome_dir,
+          tmp_dir:            this.selectedCfg.tmp_dir || undefined,
+          threads:            this.selectedCfg.threads,
+          batch_size:         this.selectedCfg.batch_size,
+          parallel_downloads: this.selectedCfg.parallel_downloads,
+          overwrite:          !!this.selectedCfg.overwrite,
+          do_check:           !!this.selectedCfg.do_check,
+          do_download:        !!this.selectedCfg.do_download,
+          do_process:         !!this.selectedCfg.do_process,
+        };
+        const res = await apiPost('/api/tasks', payload);
+        bootstrap.Modal.getInstance(document.getElementById('useConfigModal'))?.hide();
+        showToast(`任务 #${res.id} 已提交`, 'success');
+        setTimeout(() => { window.location.href = '/admin?tab=tasks'; }, 1000);
+      } catch(e) { this.useError = e.message; }
+      finally    { this.submitting = false; }
+    },
+
+    fmtDate,
+
+    _openIntegrityModalWithState(cfg) {
+      this.integrityState = {
+        status: 'running', genome_dir: cfg.genome_dir, config_id: cfg.id,
+        check_id: null,
+        workers: cfg.threads || 1,
+        total: 0, current: 0, passed: 0, failed: 0, missing: 0,
+        current_file: '', failed_files: [], missing_files: [],
+        started_at: null, finished_at: null,
+      };
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('integrityModal')).show();
+    },
+
+    startIntegrityCheck(cfg) {
+      this._openIntegrityModalWithState(cfg);
+      this._startIntegrityCheckRequest(cfg.genome_dir, cfg.id, false);
+    },
+
+    _startIntegrityCheckRequest(genomeDir, configId, forceNew = false) {
+      fetch('/api/integrity_check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genome_dir: genomeDir, config_id: configId, force_new: forceNew }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.check_id) {
+          this._integrityCheckId = data.check_id;
+          if (data.reused) {
+            showToast('已进入最近一次校验结果', 'warning');
+          }
+          this._pollIntegrity(data.check_id);
+        }
+        else showToast('启动校验失败', 'danger');
+      })
+      .catch(e => showToast('启动校验失败：' + e.message, 'danger'));
+    },
+
+    rerunIntegrityCheck() {
+      const s = this.integrityState;
+      if (!s?.genome_dir) {
+        showToast('未找到可重新校验的目录', 'warning');
+        return;
+      }
+      if (!confirm('确认重新开始完整性校验？将从头重新计算。')) return;
+      this._openIntegrityModalWithState({ genome_dir: s.genome_dir, id: s.config_id || null });
+      this._startIntegrityCheckRequest(s.genome_dir, s.config_id || null, true);
+    },
+
+    _pollIntegrity(checkId) {
+      if (this._integrityTimer) clearInterval(this._integrityTimer);
+      this._integrityTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/integrity_check/${checkId}`);
+          if (!res.ok) { clearInterval(this._integrityTimer); return; }
+          const data = await res.json();
+          this.integrityState = data;
+          if (!['running', 'cancelling'].includes(this.integrityState.status)) {
+            clearInterval(this._integrityTimer);
+            this._integrityTimer = null;
+            this._integrityCheckId = null;
+          }
+        } catch(e) {
+          clearInterval(this._integrityTimer);
+          this._integrityTimer = null;
+          this._integrityCheckId = null;
+        }
+      }, 800);
+    },
+
+    async cancelIntegrityCheck() {
+      const checkId = this.integrityState?.check_id || this._integrityCheckId;
+      if (!checkId) {
+        showToast('未找到可取消的校验任务', 'warning');
+        return;
+      }
+      if (!confirm('确认取消当前完整性校验任务？')) return;
+      try {
+        await apiPost(`/api/integrity_check/${checkId}/cancel`, {});
+        showToast('已请求取消校验任务', 'warning');
+      } catch(e) {
+        showToast('取消失败：' + e.message, 'danger');
+      }
+    },
+
+    async repairIntegrity() {
+      const s = this.integrityState;
+      if (!s) return;
+      const count = (s.failed || 0) + (s.missing || 0);
+      if (!s.config_id) {
+        showToast('无法修复：未关联配置，请从配置卡片的校验按钮启动', 'warning');
+        return;
+      }
+      if (!confirm(`将删除 ${s.failed || 0} 个损坏文件并清除 ${s.missing || 0} 个缺失条目，然后提交预下载任务重新获取（共 ${count} 个 GCA）。确认继续？`)) return;
+      try {
+        const res = await fetch(`/api/integrity_check/${s.check_id}/repair`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config_id: s.config_id }),
+        });
+        if (!res.ok) throw new Error((await res.json()).detail);
+        const data = await res.json();
+        bootstrap.Modal.getInstance(document.getElementById('integrityModal'))?.hide();
+        showToast(`已删除 ${data.deleted} 个损坏文件，任务 #${data.task_id} 已提交`, 'success');
+        setTimeout(() => { window.location.href = '/admin?tab=tasks'; }, 1200);
+      } catch(e) { showToast('修复失败：' + e.message, 'danger'); }
+    },
+
+    startBlastDbCheck(cfg) {
+      this.blastDbState = {
+        status: 'running', phase: 'scanning', genome_dir: cfg.genome_dir, config_id: cfg.id,
+        check_id: null, workers: cfg.threads || 1,
+        total: 0, current: 0, valid: 0, invalid: 0, failed_gcas: [],
+        started_at: null, finished_at: null,
+      };
+      this.blastDbPage = 0;
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('blastDbModal')).show();
+      this._startBlastDbCheckRequest(cfg.genome_dir, cfg.id, false);
+    },
+
+    _startBlastDbCheckRequest(genomeDir, configId, forceNew = false) {
+      fetch('/api/blast_db_check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genome_dir: genomeDir, config_id: configId, force_new: forceNew }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.check_id) {
+          this._blastDbCheckId = data.check_id;
+          if (data.reused) showToast('已进入最近一次校验结果', 'warning');
+          this._pollBlastDbCheck(data.check_id);
+        } else {
+          showToast('启动校验失败', 'danger');
+        }
+      })
+      .catch(e => showToast('启动校验失败：' + e.message, 'danger'));
+    },
+
+    rerunBlastDbCheck() {
+      const s = this.blastDbState;
+      if (!s?.genome_dir) { showToast('未找到可重新校验的目录', 'warning'); return; }
+      if (!confirm('确认重新开始 BLAST 数据库完整性校验？将从头重新检查。')) return;
+      this.blastDbState = {
+        status: 'running', phase: 'scanning', genome_dir: s.genome_dir, config_id: s.config_id || null,
+        check_id: null, workers: s.workers || 1,
+        total: 0, current: 0, valid: 0, invalid: 0, failed_gcas: [],
+        started_at: null, finished_at: null,
+      };
+      this.blastDbPage = 0;
+      this._startBlastDbCheckRequest(s.genome_dir, s.config_id || null, true);
+    },
+
+    _pollBlastDbCheck(checkId) {
+      if (this._blastDbTimer) clearInterval(this._blastDbTimer);
+      this._blastDbTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/blast_db_check/${checkId}`);
+          if (!res.ok) { clearInterval(this._blastDbTimer); return; }
+          const data = await res.json();
+          this.blastDbState = data;
+          if (!['running', 'cancelling'].includes(this.blastDbState.status)) {
+            clearInterval(this._blastDbTimer);
+            this._blastDbTimer   = null;
+            this._blastDbCheckId = null;
+          }
+        } catch(e) {
+          clearInterval(this._blastDbTimer);
+          this._blastDbTimer   = null;
+          this._blastDbCheckId = null;
+        }
+      }, 800);
+    },
+
+    async cancelBlastDbCheck() {
+      const checkId = this.blastDbState?.check_id || this._blastDbCheckId;
+      if (!checkId) { showToast('未找到可取消的校验任务', 'warning'); return; }
+      if (!confirm('确认取消当前 BLAST 数据库校验任务？')) return;
+      try {
+        await apiPost(`/api/blast_db_check/${checkId}/cancel`, {});
+        showToast('已请求取消校验任务', 'warning');
+      } catch(e) { showToast('取消失败：' + e.message, 'danger'); }
+    },
+
+    async runStep(cfg, step) {
+      const labels = { predownload: '检查+预下载', merge: '合并更新', process: '格式化基因组' };
+      try {
+        const res = await apiPost(`/api/configs/${cfg.id}/run_step?step=${step}`);
+        showToast(`任务 #${res.task_id} 已提交（${labels[step]}）`, 'success');
+        setTimeout(() => { window.location.href = '/admin?tab=tasks'; }, 1200);
+      } catch(e) { showToast(`提交失败：${e.message}`, 'danger'); }
+    },
+
+    startFaiIndex(cfg) {
+      this.faiState = {
+        status: 'running', genome_dir: cfg.genome_dir,
+        task_id: null, workers: cfg.threads || 4,
+        total: 0, current: 0, built: 0, skipped: 0, failed_gcas: [],
+        started_at: null, finished_at: null, error: null,
+      };
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('faiIndexModal')).show();
+      fetch('/api/fai_index', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genome_dir: cfg.genome_dir, workers: cfg.threads || 4 }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.task_id) {
+          this._faiTaskId = data.task_id;
+          if (data.reused) showToast('已进入最近一次索引任务结果', 'warning');
+          this._pollFaiIndex(data.task_id);
+        } else {
+          showToast('启动索引任务失败', 'danger');
+        }
+      })
+      .catch(e => showToast('启动索引任务失败：' + e.message, 'danger'));
+    },
+
+    _pollFaiIndex(taskId) {
+      if (this._faiTimer) clearInterval(this._faiTimer);
+      this._faiTimer = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/fai_index/${taskId}`);
+          if (!res.ok) { clearInterval(this._faiTimer); return; }
+          const data = await res.json();
+          this.faiState = data;
+          if (!['running', 'cancelling'].includes(this.faiState.status)) {
+            clearInterval(this._faiTimer);
+            this._faiTimer  = null;
+            this._faiTaskId = null;
+          }
+        } catch(e) {
+          clearInterval(this._faiTimer);
+          this._faiTimer  = null;
+          this._faiTaskId = null;
+        }
+      }, 800);
+    },
+
+    async cancelFaiIndex() {
+      const taskId = this.faiState?.task_id || this._faiTaskId;
+      if (!taskId) { showToast('未找到可取消的任务', 'warning'); return; }
+      if (!confirm('确认取消当前 FAI 索引构建任务？')) return;
+      try {
+        await apiPost(`/api/fai_index/${taskId}/cancel`, {});
+        showToast('已请求取消', 'warning');
+      } catch(e) { showToast('取消失败：' + e.message, 'danger'); }
+    },
+
+    rerunFaiIndex() {
+      const s = this.faiState;
+      if (!s?.genome_dir) { showToast('未找到可重建的目录', 'warning'); return; }
+      if (!confirm('确认重新创建所有缺失的 FAI 索引？')) return;
+      this.startFaiIndex({ genome_dir: s.genome_dir, threads: s.workers || 4 });
+    },
+  };
+}
+</script>
+
+</body>
+</html>

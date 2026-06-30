@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数据统计 — NCBI Genome Manager</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    body {
+      background:
+        radial-gradient(circle at 12% -10%, rgba(30, 93, 146, .16), transparent 38%),
+        radial-gradient(circle at 92% 0%, rgba(56, 189, 248, .16), transparent 30%),
+        linear-gradient(180deg, #eef4fb 0%, #f7f9fc 48%, #eef3f9 100%);
+      min-height: 100vh;
+    }
+    .stats-hero {
+      background: linear-gradient(120deg, #ffffff 0%, #f8fbff 70%);
+      border: 1px solid #dce8f5;
+      border-radius: 16px;
+      box-shadow: 0 10px 24px rgba(30, 52, 92, .08);
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+    .stats-hero-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #1f314f;
+      margin-bottom: 2px;
+    }
+    .stats-hero-subtitle {
+      color: #64748b;
+      font-size: .9rem;
+      margin-bottom: 0;
+    }
+    .stats-wrapper {
+      display: flex;
+      gap: 0;
+      background: #f5f9ff;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid #d6e5f4;
+      box-shadow: 0 12px 24px rgba(20, 57, 99, .10);
+      min-height: 460px;
+    }
+    .taxon-list {
+      width: 290px;
+      flex-shrink: 0;
+      background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
+      border-right: 1px solid #dbe8f6;
+      max-height: 700px;
+      overflow: auto;
+    }
+    .taxon-list::-webkit-scrollbar { width: 8px; }
+    .taxon-list::-webkit-scrollbar-thumb { background: #c4d7ea; border-radius: 8px; }
+    .taxon-list-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 14px 20px;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .07em;
+      color: #6b7f99;
+      text-transform: uppercase;
+      border-bottom: 1px solid #e4edf8;
+      background: rgba(248, 252, 255, .96);
+      backdrop-filter: blur(4px);
+    }
+    .taxon-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      margin: 6px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background .18s, color .18s, transform .18s;
+      border: 1px solid transparent;
+    }
+    .taxon-item:hover {
+      background: #eaf4ff;
+      transform: translateX(2px);
+    }
+    .taxon-item.active {
+      background: linear-gradient(120deg, #1f6d9f 0%, #1b5680 100%);
+      color: #fff;
+      border-color: rgba(255,255,255,.18);
+      box-shadow: 0 8px 16px rgba(24, 78, 118, .28);
+    }
+    .taxon-item .taxon-icon-wrap {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      border: 2px solid currentColor;
+      opacity: .86;
+    }
+    /* 当使用上传图片作为 icon 时，移除外层圆环以避免双圈 */
+    .taxon-item .taxon-icon-wrap.icon-img {
+      border: none;
+      background: transparent;
+      opacity: 1;
+    }
+    .taxon-item.active .taxon-icon-wrap { border-color: rgba(255,255,255,.5); opacity: 1; }
+    .taxon-item-name { font-size: .98rem; font-weight: 600; }
+    .taxon-item .taxon-count-badge {
+      margin-left: auto;
+      font-size: .72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #dfeaf6;
+      color: #556b86;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .taxon-item.active .taxon-count-badge { background: rgba(255,255,255,.2); color: #fff; }
+    .stat-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 46px 64px;
+      background: linear-gradient(135deg, #edf5ff 0%, #deecfa 45%, #d7e7f8 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-panel::before,
+    .stat-panel::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .stat-panel::before {
+      width: 320px;
+      height: 320px;
+      right: -150px;
+      top: -140px;
+      background: radial-gradient(circle, rgba(28, 127, 196, .22) 0%, rgba(28, 127, 196, 0) 70%);
+    }
+    .stat-panel::after {
+      width: 260px;
+      height: 260px;
+      left: -120px;
+      bottom: -120px;
+      background: radial-gradient(circle, rgba(34, 197, 94, .18) 0%, rgba(34, 197, 94, 0) 70%);
+    }
+    .stat-panel > * { position: relative; z-index: 1; }
+    .stat-panel-title {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: .02em;
+      color: #1a2a4a;
+      margin-bottom: 18px;
+    }
+    .storage-path-list {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 30px;
+      width: min(760px, 92%);
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .storage-path-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.66);
+      border: 1px solid rgba(116, 157, 198, .36);
+      color: #4d6480;
+      font-size: .82rem;
+      box-shadow: 0 2px 8px rgba(71, 108, 145, .14);
+      backdrop-filter: blur(2px);
+    }
+    .storage-path-item i {
+      width: 14px;
+      text-align: center;
+    }
+    .storage-path-item span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stat-circles {
+      display: flex;
+      gap: 52px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+    .stat-circle-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .stat-circle {
+      width: 186px;
+      height: 186px;
+      border-radius: 50%;
+      border: 3px solid #3498db;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,.72);
+      box-shadow: inset 0 0 0 8px rgba(255,255,255,.45), 0 10px 20px rgba(44, 101, 149, .18);
+      backdrop-filter: blur(4px);
+      transition: transform .22s, box-shadow .22s;
+    }
+    .stat-circle:hover {
+      transform: translateY(-3px) scale(1.03);
+      box-shadow: inset 0 0 0 8px rgba(255,255,255,.58), 0 14px 24px rgba(52, 152, 219, .28);
+    }
+    .stat-circle-value {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #1a2a4a;
+      line-height: 1;
+      letter-spacing: .01em;
+    }
+    .stat-circle-label {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #3498db;
+    }
+    .stat-circle.circle-ref { border-color: #2ecc71; }
+    .stat-circle.circle-ref .stat-circle-value { color: #1e8449; }
+    .stat-circle-wrap.circle-ref .stat-circle-label { color: #2ecc71; }
+    .stat-circle.circle-format { border-color: #6f42c1; }
+    .stat-circle.circle-format .stat-circle-value { color: #4b2d8a; }
+    .stat-circle-wrap.circle-format .stat-circle-label { color: #6f42c1; }
+    .stat-circle.circle-pending { border-color: #e67e22; }
+    .stat-circle.circle-pending .stat-circle-value { color: #b9770e; }
+    .stat-circle-wrap.circle-pending .stat-circle-label { color: #e67e22; }
+    .detail-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.75);
+      border: 1px solid rgba(107, 148, 190, .45);
+      color: #2d76be;
+      font-weight: 600;
+      transition: all .18s;
+    }
+    .detail-link:hover {
+      background: #ffffff;
+      color: #195f9f;
+      box-shadow: 0 6px 14px rgba(52, 120, 181, .2);
+      transform: translateY(-1px);
+    }
+    .lineage-input {
+      border: none; background: transparent; outline: none;
+      width: 100%; min-width: 160px;
+      font-size: .8rem; color: #64748b; cursor: default;
+      padding: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lineage-input:focus { outline: 1px dashed #94a3b8; background: #f8fafc; border-radius: 3px; cursor: text; }
+    .table-ngm thead th {
+      background: #f4f8fd;
+      color: #3f5978;
+      border-bottom: 1px solid #d9e6f2;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .table-ngm tbody tr:hover {
+      background: #f6fbff;
+    }
+    .empty-panel i { font-size: 3rem; margin-bottom: 12px; display: block; }
+    .loading-overlay { display: flex; align-items: center; justify-content: center; gap: 12px; color: #64748b; }
+    .global-stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+    .global-stat-card {
+      background: linear-gradient(145deg, #ffffff 0%, #f6faff 100%);
+      border: 1px solid #dce9f6;
+      border-radius: 14px;
+      padding: 14px 22px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 6px 14px rgba(29, 75, 122, .08);
+      transition: transform .18s, box-shadow .18s;
+      flex: 1;
+      min-width: 180px;
+    }
+    .global-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 18px rgba(29, 75, 122, .13);
+    }
+    .global-stat-card .gsc-icon { font-size: 1.6rem; }
+    .global-stat-card .gsc-val  { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+    .global-stat-card .gsc-label { font-size: .78rem; color: #64748b; }
+
+    @media (min-width: 993px) {
+      .storage-path-list {
+        width: min(680px, 82%);
+      }
+      .stats-container {
+        height: calc(100vh - 58px);
+        display: flex;
+        flex-direction: column;
+        padding-top: 14px !important;
+        padding-bottom: 14px !important;
+      }
+      .stats-view {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+      .stats-view .stats-wrapper {
+        flex: 1;
+        min-height: 0;
+      }
+      .stats-view .taxon-list {
+        max-height: none;
+      }
+      .stats-view .stat-panel {
+        min-height: 0;
+      }
+    }
+
+    @media (max-width: 992px) {
+      .stats-wrapper {
+        flex-direction: column;
+        min-height: unset;
+      }
+      .taxon-list {
+        width: 100%;
+        max-height: 260px;
+        border-right: none;
+        border-bottom: 1px solid #dbe8f6;
+      }
+      .stat-panel {
+        padding: 28px 18px 30px;
+      }
+      .stat-panel-title {
+        font-size: 1.9rem;
+      }
+      .stat-circles {
+        gap: 20px;
+      }
+      .stat-circle {
+        width: 138px;
+        height: 138px;
+      }
+      .stat-circle-value {
+        font-size: 1.8rem;
+      }
+      .storage-path-item span {
+        max-width: 78vw;
+      }
+    }
+    @media (max-width: 576px) {
+      .container-fluid {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+      }
+      .stats-hero {
+        padding: 14px 14px;
+      }
+      .stats-hero-title {
+        font-size: 1.08rem;
+      }
+      .global-stat-row {
+        gap: 10px;
+      }
+      .global-stat-card {
+        min-width: calc(50% - 8px);
+        padding: 12px 12px;
+      }
+      .global-stat-card .gsc-icon {
+        font-size: 1.2rem;
+      }
+      .global-stat-card .gsc-val {
+        font-size: 1.05rem;
+      }
+      .taxon-item {
+        margin: 4px 6px;
+      }
+      .stat-circle {
+        width: 122px;
+        height: 122px;
+      }
+      .stat-circle-value {
+        font-size: 1.55rem;
+      }
+      .detail-link {
+        font-size: .85rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999"></div>
+
+<div x-data="statsPage()">
+
+  <nav class="navbar navbar-dark navbar-ngm px-4 py-2 mb-0">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <i class="bi bi-diagram-3-fill fs-5"></i>
+      <span>NCBI Genome Manager</span>
+    </a>
+    <div class="d-flex gap-3 align-items-center">
+      <span class="text-white fw-semibold">
+        <i class="bi bi-bar-chart-fill me-1"></i>数据统计
+      </span>
+      <button class="btn btn-sm btn-outline-light ms-3" @click="refresh()" title="刷新">
+        <i class="bi bi-arrow-clockwise" :class="{'bi-spin': loading}"></i>
+      </button>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4 pt-4 stats-container">
+
+    <!-- ══ 统计视图 ══ -->
+    <div class="stats-view" x-show="view === 'stats'">
+
+      <div class="stats-hero">
+        <h5 class="stats-hero-title">
+          <i class="bi bi-bar-chart-fill me-2 text-primary"></i>基因组数据统计
+        </h5>
+        <p class="stats-hero-subtitle">本地已下载的 NCBI 基因组数量概览，按分类单元归类展示</p>
+      </div>
+
+      <div class="global-stat-row">
+        <div class="global-stat-card">
+          <i class="bi bi-collection-fill gsc-icon text-primary"></i>
+          <div><div class="gsc-val" x-text="fmtK(globalTotal)"></div><div class="gsc-label">基因组总数</div></div>
+        </div>
+        <div class="global-stat-card">
+          <i class="bi bi-bookmark-star-fill gsc-icon text-success"></i>
+          <div><div class="gsc-val" x-text="fmtK(globalRef)"></div><div class="gsc-label">参考基因组</div></div>
+        </div>
+        <div class="global-stat-card">
+          <i class="bi bi-diagram-3-fill gsc-icon" style="color:#6f42c1"></i>
+          <div><div class="gsc-val" x-text="taxons.length"></div><div class="gsc-label">分类单元</div></div>
+        </div>
+        <div class="global-stat-card">
+          <i class="bi bi-arrow-repeat gsc-icon text-warning"></i>
+          <div><div class="gsc-val" x-text="fmtK(globalPending)"></div><div class="gsc-label">待更新基因组数量</div></div>
+        </div>
+      </div>
+
+      <div class="stats-wrapper" x-show="!loading && taxons.length > 0">
+        <div class="taxon-list">
+          <div class="taxon-list-header">分类单元</div>
+          <template x-for="t in taxons" :key="t.taxon">
+            <div class="taxon-item" :class="{active: selected?.taxon === t.taxon}" @click="selected = t">
+              <div class="taxon-icon-wrap" :class="{'icon-img': t.icon && t.icon.startsWith('/static')}">
+                <template x-if="t.icon && t.icon.startsWith('/static')">
+                  <img :src="t.icon" alt="icon" style="max-width:100%; max-height:100%; object-fit:contain" />
+                </template>
+                <template x-if="!t.icon || !t.icon.startsWith('/static')">
+                  <i class="bi" :class="taxonIcon(t.taxon)"></i>
+                </template>
+              </div>
+              <span class="taxon-item-name" x-text="t.taxon"></span>
+              <span class="taxon-count-badge" x-text="fmtK(t.total)"></span>
+            </div>
+          </template>
+        </div>
+
+        <div class="stat-panel">
+          <template x-if="selected">
+            <div class="text-center w-100">
+              <div class="stat-panel-title" x-text="selected.taxon"></div>
+              <!-- 基因组存储路径 -->
+              <div class="storage-path-list"
+                   x-show="(selected.ref_dirs||[]).concat(selected.other_dirs||[]).length > 0">
+                <template
+                  x-for="d in (selected.ref_dirs||[]).concat(selected.other_dirs||[]).filter((v,i,a)=>a.indexOf(v)===i)"
+                  :key="d">
+                  <div class="storage-path-item" :title="'点击复制: ' + d"
+                       style="cursor:pointer" @click="copyPath(d)">
+                    <i class="bi bi-folder-fill text-primary opacity-75"></i>
+                    <span class="font-monospace" x-text="d"></span>
+                    <i class="bi bi-clipboard ms-auto text-muted opacity-50" style="font-size:.7rem"></i>
+                  </div>
+                </template>
+              </div>
+              <div class="stat-circles">
+                <div class="stat-circle-wrap">
+                  <div class="stat-circle" style="cursor:pointer" title="点击查看全部基因组"
+                       @click="browseTable(selected.taxon, '')">
+                    <span class="stat-circle-value" x-text="fmtK(selected.total)"></span>
+                  </div>
+                  <span class="stat-circle-label">基因组总数</span>
+                </div>
+                <div class="stat-circle-wrap circle-ref">
+                  <div class="stat-circle circle-ref" style="cursor:pointer" title="点击查看参考基因组"
+                       @click="browseTable(selected.taxon, 'ref')">
+                    <span class="stat-circle-value" x-text="fmtK(selected.ref_count)"></span>
+                  </div>
+                  <span class="stat-circle-label">参考基因组数量</span>
+                </div>
+                <div class="stat-circle-wrap circle-pending">
+                  <div class="stat-circle circle-pending">
+                    <span class="stat-circle-value" x-text="fmtK(selected.pending_update)"></span>
+                  </div>
+                  <span class="stat-circle-label">待更新基因组数量</span>
+                </div>
+              </div>
+              <p class="text-muted small mt-3 mb-1">
+                <a href="#" class="text-decoration-none detail-link" @click.prevent="browseTable(selected.taxon, '')">
+                  <i class="bi bi-table me-1"></i>查看全部基因组详情
+                </a>
+              </p>
+              <div class="d-flex justify-content-center gap-4 mt-2 flex-wrap">
+                <span class="text-muted small">
+                  <i class="bi bi-clock-history me-1 text-success"></i>当前基因组更新日期：
+                  <strong x-text="selected.genome_date ? selected.genome_date.slice(0,10) : '未设置'"></strong>
+                </span>
+                <span class="text-muted small" x-show="selected.next_check_at">
+                  <i class="bi bi-calendar-check me-1 text-primary"></i>下次检查：
+                  <strong x-text="fmtDate(selected.next_check_at)"></strong>
+                </span>
+                <span class="text-muted small" x-show="selected.next_download_at && !selected.next_check_at">
+                  <i class="bi bi-calendar-check me-1 text-primary"></i>下次下载：
+                  <strong x-text="fmtDate(selected.next_download_at)"></strong>
+                </span>
+                <span class="text-muted small">
+                  <i class="bi bi-calendar-clock me-1 text-secondary"></i>最新检查日期：
+                  <strong x-text="selected.last_auto_updated ? selected.last_auto_updated.slice(0,10) : '从未'"></strong>
+                </span>
+              </div>
+            </div>
+          </template>
+          <template x-if="!selected">
+            <div class="empty-panel">
+              <i class="bi bi-bar-chart"></i>
+              <p>从左侧选择一个分类单元查看统计</p>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <div class="stats-wrapper justify-content-center align-items-center py-5" x-show="loading">
+        <div class="loading-overlay"><span class="spinner-border"></span><span>加载中…</span></div>
+      </div>
+
+      <div class="card shadow-sm" x-show="!loading && taxons.length === 0">
+        <div class="card-body empty-state text-center py-5">
+          <i class="bi bi-bar-chart d-block mb-3 fs-1 text-secondary"></i>
+          <p class="text-muted mb-0">暂无本地基因组数据，完成下载任务后将自动统计</p>
+        </div>
+      </div>
+
+    </div><!-- /统计视图 -->
+
+
+    <!-- ══ 基因组表格视图 ══ -->
+    <div x-show="view === 'table'">
+
+      <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item">
+            <a href="#" @click.prevent="view='stats'" class="text-decoration-none">
+              <i class="bi bi-bar-chart-fill me-1"></i>数据统计
+            </a>
+          </li>
+          <li class="breadcrumb-item active" x-text="tableFilter || '全部'"></li>
+        </ol>
+      </nav>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+          <div class="row g-2 align-items-center">
+            <div class="col-auto">
+              <span class="badge bg-primary fs-6" x-text="tableFilter || '全部分类单元'"></span>
+            </div>
+            <div class="col-auto text-muted small">
+              <i class="bi bi-collection me-1"></i>
+              <span x-text="tableTotal + ' 个基因组'"></span>
+            </div>
+            <div class="col ms-auto d-flex gap-2 justify-content-end flex-wrap">
+              <select class="form-select form-select-sm" style="width:auto"
+                      x-model="tableType" @change="tableOffset=0; fetchTable()">
+                <option value="">全部类型</option>
+                <option value="ref">参考</option>
+                <option value="all">非参考</option>
+              </select>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" style="width:260px"
+                       placeholder="GCA / 物种名 / 谱系 / TaxID…"
+                       x-model="tableSearch"
+                       @input.debounce.400ms="tableOffset=0; fetchTable()" />
+                <button class="btn btn-outline-secondary btn-sm"
+                        x-show="tableSearch"
+                        @click="tableSearch=''; tableOffset=0; fetchTable()"
+                        title="清除搜索">
+                  <i class="bi bi-x"></i>
+                </button>
+              </div>
+              <button class="btn btn-outline-success btn-sm" @click="exportTable()" title="导出 TSV">
+                <i class="bi bi-download me-1"></i>导出
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-ngm mb-0">
+              <colgroup>
+                <col style="width:10%">
+                <col style="width:12%">
+                <col style="width:8%">
+                <col style="width:5%">
+                <col style="width:5%">
+                <col style="width:52%">
+                <col style="width:8%">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>GCA 编号</th>
+                  <th>物种名称</th>
+                  <th class="text-end">序列长度 (bp)</th>
+                  <th>TaxID</th>
+                  <th>类型</th>
+                  <th>谱系</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-if="tableGenomes.length === 0 && !loading">
+                  <tr>
+                    <td colspan="7">
+                      <div class="empty-state text-center py-4">
+                        <i class="bi bi-collection d-block mb-2 fs-2 text-secondary"></i>
+                        <span class="text-muted">未找到匹配的基因组记录</span>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
+                <template x-for="g in tableGenomes" :key="g.id">
+                  <tr>
+                    <td class="font-monospace fw-semibold small text-nowrap">
+                      <span x-text="g.gca"></span>
+                      <button class="btn btn-link btn-sm p-0 ms-1 text-muted opacity-50"
+                              :title="'复制文件路径: ' + genomePath(g)"
+                              @click.stop="copyPath(genomePath(g))">
+                        <i class="bi bi-clipboard" style="font-size:.7rem"></i>
+                      </button>
+                    </td>
+                    <td class="small" x-text="g.organism?.replace(/_/g,' ') || '—'"></td>
+                    <td class="text-end small text-muted" x-text="fmtNum(g.length)"></td>
+                    <td class="small text-muted" x-text="g.taxid || '—'"></td>
+                    <td>
+                      <span class="badge"
+                            :class="g.genome_type === 'ref' ? 'bg-info text-dark' : 'bg-warning text-dark'"
+                            x-text="g.genome_type === 'ref' ? '参考' : '非参考'"></span>
+                    </td>
+                    <td class="small">
+                      <template x-if="g.lineage && g.lineage !== 'NA'">
+                        <div class="d-flex align-items-center gap-1">
+                          <input type="text" readonly class="lineage-input"
+                                 :value="g.lineage"
+                                 :title="g.lineage"
+                                 @click="$el.select()"
+                                 @focus="$el.select()" />
+                          <button class="btn btn-link btn-sm p-0 flex-shrink-0 text-muted"
+                                  title="复制完整谱系"
+                                  @click.stop="copyLineage(g.lineage)">
+                            <i class="bi bi-clipboard" style="font-size:.75rem"></i>
+                          </button>
+                        </div>
+                      </template>
+                      <template x-if="!g.lineage || g.lineage === 'NA'">
+                        <span class="text-muted">—</span>
+                      </template>
+                    </td>
+                    <td class="small text-muted" x-text="g.last_updated ? g.last_updated.slice(0,10) : '—'"></td>
+                  </tr>
+                </template>
+                <template x-if="loading">
+                  <tr>
+                    <td colspan="7" class="text-center py-4 text-muted">
+                      <span class="spinner-border spinner-sm me-2"></span>加载中…
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center py-2">
+          <span class="text-muted small">
+            第 <strong x-text="Math.floor(tableOffset/tablePageSize)+1"></strong> /
+            <strong x-text="Math.max(1, Math.ceil(tableTotal/tablePageSize))"></strong> 页，
+            共 <strong x-text="tableTotal"></strong> 条
+          </span>
+          <nav>
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item" :class="{disabled: tableOffset===0}">
+                <a class="page-link" href="#" @click.prevent="tableOffset=0; fetchTable()">«</a>
+              </li>
+              <li class="page-item" :class="{disabled: tableOffset===0}">
+                <a class="page-link" href="#" @click.prevent="tableOffset=Math.max(0,tableOffset-tablePageSize); fetchTable()">‹</a>
+              </li>
+              <li class="page-item" :class="{disabled: tableOffset+tablePageSize>=tableTotal}">
+                <a class="page-link" href="#" @click.prevent="tableOffset+=tablePageSize; fetchTable()">›</a>
+              </li>
+              <li class="page-item" :class="{disabled: tableOffset+tablePageSize>=tableTotal}">
+                <a class="page-link" href="#" @click.prevent="tableOffset=Math.max(0,(Math.ceil(tableTotal/tablePageSize)-1)*tablePageSize); fetchTable()">»</a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+
+    </div><!-- /表格视图 -->
+
+  </div><!-- /container -->
+</div><!-- /x-data -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<script>
+const TAXON_ICONS = {
+  'eukaryota':'bi-flower3','eukaryote':'bi-flower3','archaea':'bi-tornado',
+  'bacteria':'bi-virus2','viruses':'bi-virus','virus':'bi-virus',
+  'fungi':'bi-tree','fungus':'bi-tree','plants':'bi-tree-fill','plant':'bi-tree-fill',
+  'animals':'bi-heart-fill','vertebrata':'bi-heart-fill','protozoa':'bi-circle-half',
+  'invertebrate':'bi-bug','(未分类)':'bi-question-circle',
+};
+
+function statsPage() {
+  return {
+    view:    'stats',
+    loading: false,
+
+    taxons:   [],
+    selected: null,
+
+    tableFilter:   '',
+    tableSearch:   '',
+    tableType:     '',
+    tableGenomes:  [],
+    tableTotal:    0,
+    tableOffset:   0,
+    tablePageSize: 50,
+
+    async init() { await this.fetchStats(); },
+
+    async refresh() {
+      if (this.view === 'table') await this.fetchTable();
+      else await this.fetchStats();
+    },
+
+    async fetchStats() {
+      this.loading = true;
+      try {
+        this.taxons = await apiGet('/api/stats/taxon');
+        if (this.taxons.length > 0 && !this.selected) {
+          this.selected = this.taxons[0];
+        } else if (this.selected) {
+          this.selected = this.taxons.find(t => t.taxon === this.selected.taxon) ?? this.taxons[0];
+        }
+      } catch(e) { showToast('获取统计失败：' + e.message, 'danger'); }
+      finally    { this.loading = false; }
+    },
+
+    taxonIcon(name) {
+      if (!name) return 'bi-collection';
+      const key = name.toLowerCase();
+      for (const [k, v] of Object.entries(TAXON_ICONS)) { if (key.includes(k)) return v; }
+      return 'bi-collection';
+    },
+
+    get globalTotal()   { return this.taxons.reduce((s,t) => s + t.total, 0); },
+    get globalRef()     { return this.taxons.reduce((s,t) => s + t.ref_count, 0); },
+    get globalPending() { return this.taxons.reduce((s,t) => s + (t.pending_update||0), 0); },
+
+    browseTable(taxon, type = '') {
+      this.tableFilter = taxon || '';
+      this.tableSearch = '';
+      this.tableType   = type;
+      this.tableOffset = 0;
+      this.view = 'table';
+      this.fetchTable();
+    },
+
+    async fetchTable() {
+      this.loading = true;
+      try {
+        let url = `/api/genomes?limit=${this.tablePageSize}&offset=${this.tableOffset}`;
+        if (this.tableFilter) url += `&taxon=${encodeURIComponent(this.tableFilter)}`;
+        if (this.tableSearch)  url += `&search=${encodeURIComponent(this.tableSearch)}`;
+        if (this.tableType)    url += `&genome_type=${encodeURIComponent(this.tableType)}`;
+        const data = await apiGet(url);
+        this.tableGenomes = data.items;
+        this.tableTotal   = data.total;
+      } catch(e) { showToast('获取基因组列表失败：' + e.message, 'danger'); }
+      finally    { this.loading = false; }
+    },
+
+    exportTable() {
+      let url = `/api/genomes/export?`;
+      if (this.tableFilter) url += `taxon=${encodeURIComponent(this.tableFilter)}&`;
+      if (this.tableSearch)  url += `search=${encodeURIComponent(this.tableSearch)}&`;
+      if (this.tableType)    url += `genome_type=${encodeURIComponent(this.tableType)}&`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${this.tableFilter || 'all'}_genomes.tsv`;
+      a.click();
+    },
+
+    fmtDate,
+    fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('zh-CN'); },
+    fmtK(n) {
+      if (n == null || n === 0) return '0';
+      if (n >= 1000000) return (n/1000000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+      if (n >= 1000) return (n/1000).toFixed(2).replace(/\.?0+$/, '') + 'K';
+      return String(n);
+    },
+    lineageSummary(lineage) {
+      if (!lineage || lineage === 'NA') return '—';
+      const parts = lineage.split('|').filter(Boolean);
+      return parts.slice(-3).join(' › ') || lineage;
+    },
+    copyLineage(lineage) {
+      if (!lineage || lineage === 'NA') return;
+      copyToClipboard(lineage, '谱系已复制到剪贴板');
+    },
+    copyPath(path) {
+      if (!path) return;
+      copyToClipboard(path, '路径已复制');
+    },
+    genomePath(g) {
+      if (!g || !g.genome_dir || !g.gca) return '';
+      const subdir = g.genome_type === 'ref' ? 'ref' : 'non_ref';
+      return g.genome_dir + '/' + subdir + '/genomes/' + g.gca + '.fna';
+    },
+  };
+}
+
+function copyToClipboard(text, successMsg) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast(successMsg, 'success'),
+      () => fallbackCopy(text, successMsg),
+    );
+  } else {
+    fallbackCopy(text, successMsg);
+  }
+}
+
+function fallbackCopy(text, successMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '-9999px';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    const ok = document.execCommand('copy');
+    showToast(ok ? successMsg : '复制失败，请手动复制', ok ? 'success' : 'warning');
+  } catch (e) {
+    showToast('复制失败，请手动复制', 'warning');
+  }
+  document.body.removeChild(ta);
+}
+</script>
+
+</body>
+</html>

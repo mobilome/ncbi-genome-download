@@ -1,0 +1,121 @@
+/* ===== NCBI Genome Manager — 自定义样式 ===== */
+
+:root {
+  --ngm-primary:   #1a5276;
+  --ngm-secondary: #2471a3;
+  --ngm-bg:        #f0f4f8;
+  --ngm-card-bg:   #ffffff;
+}
+
+/* ── 全局 ─────────────────────────────────── */
+body {
+  background-color: var(--ngm-bg);
+  font-size: 0.9rem;
+}
+
+/* ── 超小按钮 ────────────────────────────── */
+.btn.btn-xs {
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  border-radius: 0.2rem;
+}
+
+/* ── 导航栏 ──────────────────────────────── */
+.navbar-ngm {
+  background: linear-gradient(90deg, var(--ngm-primary), var(--ngm-secondary));
+}
+.navbar-ngm .navbar-brand {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* ── 统计卡片 ────────────────────────────── */
+.stat-card {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: transform 0.15s;
+}
+.stat-card:hover { transform: translateY(-2px); }
+.stat-card .stat-icon {
+  font-size: 2rem;
+  opacity: 0.85;
+}
+.stat-card .stat-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.stat-card .stat-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+
+/* ── 状态徽章 ────────────────────────────── */
+.badge-pending   { background-color: #6c757d; }
+.badge-running   { background-color: #0d6efd; }
+.badge-done      { background-color: #198754; }
+.badge-failed    { background-color: #dc3545; }
+.badge-cancelled { background-color: #fd7e14; }
+
+/* ── 表格 ────────────────────────────────── */
+.table-ngm thead th {
+  background-color: var(--ngm-primary);
+  color: #fff;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.table-ngm tbody tr { cursor: pointer; }
+.table-ngm tbody tr:hover { background-color: #eaf0fb; }
+
+/* ── 日志查看器 ──────────────────────────── */
+.log-viewer {
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  padding: 12px 14px;
+  max-height: 480px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-viewer .log-info    { color: #c9d1d9; }
+.log-viewer .log-success { color: #3fb950; }
+.log-viewer .log-warning { color: #e3b341; }
+.log-viewer .log-error   { color: #f85149; }
+.log-viewer .log-run     { color: #58a6ff; }
+.log-viewer .log-shell   { color: #79c0ff; }
+.log-viewer .log-step    { color: #d2a8ff; }
+
+/* ── 加载动画 ────────────────────────────── */
+.spinner-sm {
+  width: 1rem;
+  height: 1rem;
+  border-width: 0.15em;
+}
+
+/* ── 分页 ────────────────────────────────── */
+.pagination .page-link { color: var(--ngm-primary); }
+.pagination .page-item.active .page-link {
+  background-color: var(--ngm-primary);
+  border-color: var(--ngm-primary);
+}
+
+/* ── 空状态 ──────────────────────────────── */
+.empty-state {
+  padding: 60px 0;
+  color: #adb5bd;
+}
+.empty-state i { font-size: 3rem; }
+
+/* ── 配置卡片信息表格：标签列不折行 ──────── */
+.card-body .table-borderless td:first-child {
+  white-space: nowrap;
+  width: 110px;
+}
