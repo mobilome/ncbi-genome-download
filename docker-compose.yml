@@ -1,0 +1,22 @@
+services:
+  ncbi-genome-manager:
+    image: ngm:py3.12
+    container_name: ncbi-genome-manager
+    working_dir: /workspace
+    environment:
+      APP_DIR: /workspace
+      HOST: 0.0.0.0
+      PORT: 8000
+      UVICORN_RELOAD: "false"
+      NGM_SECRET_KEY: change-me-before-production
+      # NCBI_TOOLS_DIR: /workspace/bins  # datasets/dataformat 存放目录，默认为 APP_DIR/bins
+      #   删除其中的可执行文件可触发自动重新下载，直接替换可升级版本
+      # Optional: set admin setup/session behavior as needed
+      # NGM_ADMIN_USER: admin
+      # NGM_ADMIN_PASSWORD: admin123
+    volumes:
+      - ./:/workspace
+      - /home:/home
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
